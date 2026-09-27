@@ -1,3 +1,4 @@
+import {ready,emptySession} from './browser-session-helper.mjs';
 import {acceptConsent} from './consent-test-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
@@ -16,10 +17,9 @@ const server=await startPythonTestServer(path.join(temp,'test-data'),'tests.brow
 const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})}).catch(async error=>{await server.close();await rm(temp,{recursive:true,force:true});throw error;});
 const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];const starts=[],resumes=[];page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/investigations'))starts.push(r.postDataJSON());if(r.method()==='POST'&&r.url().endsWith('/resume'))resumes.push(r.postDataJSON());});page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto(base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('test-policy.pdf',{timeout:30000});
+ await page.goto(base);await ready(page);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('test-policy.pdf',{timeout:30000});
  await page.locator('#query').fill('조플루자를 처방받았습니다.');await page.locator('#send').click();await acceptConsent(page);
  await expect(page.locator('.drug-selection')).toContainText('함량·제형',{timeout:60000});
- await page.reload();await expect(page.locator('.drug-selection')).toBeVisible();
  await expect(page.getByRole('button',{name:'선택한 제품으로 계속'})).toBeDisabled();
  await page.locator('.drug-selection input[type=checkbox]').first().check();
  await page.locator('#query').fill('아직 보내지 않은 다른 질문');
@@ -38,6 +38,6 @@ try{
  execFileSync(python,['-c',"import pymupdf as f,sys;d=f.open(sys.argv[1]);assert sum(len(list(p.annots() or [])) for p in d)>0;assert '발록사비르' in ''.join(p.get_text() for p in d)",path.join(temp,'marked.pdf')]);
  // A compact screenshot of the decision scope and source connection; no personal data.
  await page.locator('.clause-group[data-kind="payment"] summary').click();await definition.locator('summary').click();if(process.env.SCREENSHOT)await page.locator('.coverage-panel').screenshot({path:process.env.SCREENSHOT});
- await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
+ await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await emptySession(page);await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
  console.log(JSON.stringify({ok:true,orchestrator:'nat',inference:'explicit-test-fixture',policyBenefit:true,ingredientLink:true,mfds:'explicit-http-fixture',productSelection:true,freshConsent:true,resumeWithoutResubmitting:true,singleConversationTurn:true,draftPreserved:true,allFourClauses:true,noBlankCards:true,nextRiderExcluded:true,highlight:true,download:true,clearAndReload:true,browserErrors:errors}));
 }catch(e){console.error(JSON.stringify({error:e.message,uiError:await page.locator('#error').textContent()}));process.exitCode=1;}finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

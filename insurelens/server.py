@@ -234,8 +234,14 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
         app.state.deleting.add(case["id"])
         try:
             await app.state.queue.cancel_case(case["id"])
+            try:
+                shutil.rmtree(root / case["id"])
+            except FileNotFoundError:
+                pass
+            except OSError:
+                # Preserve the case pointer so a failed cleanup can be retried.
+                raise AppError('CASE_DELETE_FAILED', 500) from None
             app.state.store.remove(case["id"])
-            shutil.rmtree(root / case["id"], ignore_errors=True)
         finally:
             app.state.deleting.discard(case["id"])
         return Response(status_code=204)

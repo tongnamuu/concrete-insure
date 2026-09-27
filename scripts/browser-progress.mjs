@@ -1,3 +1,4 @@
+import {ready} from './browser-session-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
@@ -14,7 +15,7 @@ const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECU
 const page=await browser.newPage();const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto(server.base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
+ await page.goto(server.base);await ready(page);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
  await page.locator('#query').fill('독감');await page.locator('#send').click();await acceptConsent(page);
  await expect(page.locator('#progressText')).toHaveText('검색 1단계',{timeout:12000});
  // Record visible text throughout the wait and the following search.
@@ -22,7 +23,7 @@ try{
  await expect.poll(()=>page.evaluate(()=>window.searchProgress.includes('검색 1단계')),{timeout:12000}).toBe(true);
  await expect(page.locator('.investigation-result')).toHaveCount(0);
  await page.locator('#cancelJob').click();await expect(page.locator('#progress')).not.toBeVisible({timeout:10000});
- const caseId=await page.evaluate(()=>localStorage.getItem('insure-lens-case'));
+ const caseId=await page.evaluate(()=>sessionStorage.getItem('insure-lens-case'));
  const res=await page.request.get(`${server.base}/api/cases/${caseId}`);const job=(await res.json()).jobs.find(j=>j.kind==='investigation');
  assert.equal(job.state,'cancelled');await expect(page.locator('.investigation-result')).toHaveCount(0);
  await page.locator('#query').fill('독감');await page.locator('#send').click();await acceptConsent(page);

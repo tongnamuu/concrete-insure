@@ -14,7 +14,8 @@
     "test:browser:coverage": "node scripts/browser-coverage.mjs",
     "test:browser:consent": "node scripts/browser-consent.mjs",
     "test:browser:progress": "node scripts/browser-progress.mjs",
-    "test:browser:conversation": "node scripts/browser-conversation.mjs"
+    "test:browser:conversation": "node scripts/browser-conversation.mjs",
+    "test:browser:reset": "node scripts/browser-reset.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "^6.3.289"

@@ -26,3 +26,19 @@ def create_conversation_test_app():
 def create_drug_test_app():
     from tests.mfds_fixture import DrugNim, provider
     return create_app(root=os.environ['DATA_DIR'], nim=DrugNim(), drugs=provider())
+
+
+def create_reset_test_app():
+    import asyncio
+    import json
+    from tests.mfds_fixture import DrugNim, provider
+    class WaitingNim(DrugNim):
+        async def chat(self, messages, model=None, **kwargs):
+            try:
+                value = json.loads(messages[-1]['content'])
+            except ValueError:
+                return await ScriptedNim.chat(self, messages, model, **kwargs)
+            if '대기' in value.get('query', ''):
+                await asyncio.Event().wait()
+            return await super().chat(messages, model, **kwargs)
+    return create_app(root=os.environ['DATA_DIR'], nim=WaitingNim(), drugs=provider())
