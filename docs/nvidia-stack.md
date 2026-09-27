@@ -16,7 +16,7 @@
 
 SDK는 서비스 REST API의 Python 클라이언트이고, NAT는 에이전트 workflow 실행 도구입니다. SDK와 NAT를 같은 것으로 취급하지 않습니다. SDK 설치가 모델 커스터마이징·평가·Guardrails 서비스 배포를 대신하지 않습니다. 이 프로젝트에는 파인튜닝이 없습니다.
 
-SDK 1.5.0에서 확인한 실제 호출은 `client.chat.completions.create(...)`입니다. `client.inference.chat`은 사용하지 않습니다. 생성자에 `base_url`과 `inference_base_url`을 구분해 넘기고, `default_headers`로 NVIDIA 인증 헤더를 설정합니다. SDK가 `/v1/chat/completions`를 붙이므로 adapter에서 설정의 마지막 `/v1`을 제거해 중복 경로를 방지합니다. 입력 추출은 `response_format.type=json_schema`로 `terms` 배열만 요청하고 25초로 제한합니다. 스키마 제약과 별개로 애플리케이션이 원문 일치 여부를 검증합니다. 현재 hosted Nemotron에서 실제 API 호출로 확인했으며, [NIM 구조화 생성 문서](https://docs.nvidia.com/nim/large-language-models/1.15.0/nim-container-variants.html)에 배포 backend별 응답 형식 차이가 설명돼 있습니다. 함수 도구 정의는 SDK의 `extra_body` 확장으로 실제 NIM JSON 형식을 전달합니다. HTTP MockTransport가 공식 SDK의 요청 URL·인증·본문을 검증합니다.
+SDK 1.5.0에서 확인한 실제 호출은 `client.chat.completions.create(...)`입니다. `client.inference.chat`은 사용하지 않습니다. 생성자에 `base_url`과 `inference_base_url`을 구분해 넘기고, `default_headers`로 NVIDIA 인증 헤더를 설정합니다. SDK가 `/v1/chat/completions`를 붙이므로 adapter에서 설정의 마지막 `/v1`을 제거해 중복 경로를 방지합니다. 입력 추출은 `response_format.type=json_schema`로 `terms` 배열만 요청하고 60초로 제한합니다. 스키마 제약과 별개로 애플리케이션이 원문 일치 여부를 검증합니다. 현재 hosted Nemotron에서 실제 API 호출로 확인했으며, [NIM 구조화 생성 문서](https://docs.nvidia.com/nim/large-language-models/1.15.0/nim-container-variants.html)에 배포 backend별 응답 형식 차이가 설명돼 있습니다. 함수 도구 정의는 SDK의 `extra_body` 확장으로 실제 NIM JSON 형식을 전달합니다. HTTP MockTransport가 공식 SDK의 요청 URL·인증·본문을 검증합니다.
 
 `NEMO_MICROSERVICES_BASE_URL`은 별도 플랫폼에만 필요합니다. 기본 hosted 추론은 `NVIDIA_API_KEY`와 기본 NIM 주소로 동작합니다. 현재 namespace/model customization/evaluation/guardrail 관리 API는 호출하지 않습니다.
 

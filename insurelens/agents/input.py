@@ -2,7 +2,7 @@ import json
 from insurelens.core import literal_terms, grounded_terms, ensure, is_conversational_term, QueryRequest
 
 
-INPUT_TIMEOUT_SECONDS = 25
+INPUT_TIMEOUT_SECONDS = 60
 INPUT_SYSTEM = (
     'Select short, concrete search phrases for an insurance policy. Input may describe an accident, '
     'property damage, illness or medication; medical details are NOT required. Include explicitly named '

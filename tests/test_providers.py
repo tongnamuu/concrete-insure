@@ -225,7 +225,7 @@ async def test_input_uses_explicit_schema_and_preserves_source_validation():
 @pytest.mark.asyncio
 async def test_input_deadline_cancels_sdk_without_retry_or_local_search(monkeypatch):
     from insurelens.agents import input as input_agent
-    assert input_agent.INPUT_TIMEOUT_SECONDS == 25
+    assert input_agent.INPUT_TIMEOUT_SECONDS == 60
     monkeypatch.setattr(input_agent, 'INPUT_TIMEOUT_SECONDS', .02)
     cancelled = asyncio.Event()
     count = 0
