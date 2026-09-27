@@ -111,7 +111,12 @@ async def test_ownership_origin_and_bounded_request(web):
     assert response.status_code == 400 and response.json() == {"error": "INVALID_REQUEST"}
 
 
-async def test_key_does_not_bypass_cloud_consent(tmp_path):
+@pytest.mark.parametrize("payload", [
+    {"query": "독감"}, {"query": "독감", "cloudConsent": False},
+    {"description": "조플루자를 처방받았습니다."},
+    {"description": "조플루자를 처방받았습니다.", "cloudConsent": False},
+])
+async def test_key_does_not_bypass_cloud_consent(tmp_path, payload):
     called = False
     async def investigate(**kwargs):
         nonlocal called
@@ -121,9 +126,11 @@ async def test_key_does_not_bypass_cloud_consent(tmp_path):
     async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Local-Request": "1"}) as client:
         case = (await client.post("/api/cases")).json()["id"]
         await upload(client, case)
-        response = await client.post(f"/api/cases/{case}/investigations", json={"query": "독감"})
+        response = await client.post(f"/api/cases/{case}/investigations", json=payload)
         assert response.status_code == 409 and response.json()["error"] == "NIM_CONSENT_REQUIRED"
         assert called is False
+        assert not any(j["kind"] == "investigation" for j in app.state.store.jobs(case))
+        assert "jobId" not in response.json() and "result" not in response.json()
 
 
 async def test_running_pdf_cancel_and_delete(tmp_path):

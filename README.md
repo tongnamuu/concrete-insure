@@ -18,7 +18,7 @@ uv run insure-lens
 
 브라우저에서 http://127.0.0.1:8000 을 엽니다. 기존 `npm start`도 Python 서버를 실행하도록 연결했습니다. 한 프로젝트의 데이터 디렉터리에는 서버를 하나만 실행하세요.
 
-`.env`의 `NVIDIA_API_KEY`만 설정하면 기본 Nemotron 모델을 사용할 수 있습니다. 기본값은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 키가 없으면 조사를 시작할 수 없고 설정 필요 상태를 표시합니다. 외부 모델로 입력·약관 발췌문을 전송하기 전에 웹의 전송 동의가 필요합니다. 모든 조사는 NAT와 Nemotron NIM을 거칩니다. 제공자 시간 초과나 잘못된 도구 응답은 실패로 알리며 재시도할 수 있습니다.
+`.env`의 `NVIDIA_API_KEY`만 설정하면 기본 Nemotron 모델을 사용할 수 있습니다. 기본값은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 키가 없으면 조사를 시작할 수 없고 설정 필요 상태를 표시합니다. 검색 버튼을 누르면 전송 동의문만 표시됩니다. 매번 체크 후 진행해야 요청을 전송하며, 취소·미동의 시 새 작업이나 결과를 만들지 않습니다. 처방 자료 업로드도 전송 전에 같은 동의를 받습니다. 모든 조사는 NAT와 Nemotron NIM을 거칩니다. 제공자 시간 초과나 잘못된 도구 응답은 실패로 알리며 재시도할 수 있습니다.
 
 | 선택 설정 | 필요한 경우 |
 |---|---|
@@ -26,7 +26,7 @@ uv run insure-lens
 | `NEMO_MICROSERVICES_BASE_URL` | 별도로 배포한 NeMo 플랫폼 주소. 일반 hosted NIM 추론에는 입력할 필요 없음 |
 | `NIM_OCR_URL` | 이미지·스캔 처방전 OCR. 실제 사용 가능한 한국어 지원 endpoint 필요 |
 | `MFDS_API_KEY` | 공공데이터포털 의약품 제품 허가정보 v08 실시간 조회용 디코딩 키 |
-| `TRANSLATION_MODEL` | 별도 경량 모델의 참고용 영어 표현. 원문·검색어·인용문은 변경하지 않음 |
+| `TRANSLATION_MODEL` | API의 선택 번역용 모델. 웹 화면에는 추가 설정을 제공하지 않음 |
 
 NeMo Microservices SDK는 서비스에 접속하는 클라이언트입니다. SDK 설치만으로 Guardrails·Evaluator·Customizer 서비스가 배포되지는 않습니다. 현재 SDK로 실행하는 기능은 **NIM 추론**이며, 별도 NeMo Guardrails Microservice를 사용했다고 표시하지 않습니다. 원문·검색어·좌표 검증은 애플리케이션에서 항상 수행합니다.
 
@@ -65,6 +65,7 @@ ReAct의 모델 출력은 허용된 도구와 ID를 고르는 데만 사용합�
 uv run --extra dev pytest -q
 npm run test:browser
 npm run test:browser:coverage
+npm run test:browser:consent
 npx skills@1.7.0 add . --list
 # SkillSpector를 별도 설치한 경우:
 sh scripts/scan-skills.sh

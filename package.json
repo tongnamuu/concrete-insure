@@ -11,7 +11,8 @@
     "test": ".venv/bin/python -m pytest -q",
     "skills:list": "npx skills@1.7.0 add . --list",
     "test:browser": "node scripts/browser-smoke.mjs",
-    "test:browser:coverage": "node scripts/browser-coverage.mjs"
+    "test:browser:coverage": "node scripts/browser-coverage.mjs",
+    "test:browser:consent": "node scripts/browser-consent.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "^6.3.289"

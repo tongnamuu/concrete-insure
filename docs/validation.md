@@ -41,3 +41,7 @@ SkillSpector2.12.0의 `--recursive --no-llm` 정적 검사 결과는 [skillspect
 실제 다국어 OCR, 별도 번역 모델, 인증된 식약처 API 호출은 실행하지 않았다. 요청·응답 계약은 테스트 대역으로 검사했다. 제품 참고 자료는 조플루자·타미플루의 날짜가 있는 제조사 출처이며 범용 약품 DB·실시간 식약처·진단 당시 허가 확인이 아니다.
 
 별도 NeMo Guardrails/Evaluator/Customizer 서비스, OpenShell sandbox는 배포하지 않았다. NemoClaw와 파인튜닝은 제외했다. 문서 전체의 조항 해석 정확성이나 ISO32000 전체 적합성 인증을 주장하지 않는다. PyMuPDF/SWIG 및 NAT의 Authlib 의존성에서 폐기 예정 경고가 있었으나 검사는 통과했다.
+
+## 검색마다 명시적 전송 동의
+
+서버 검사13개와 동의창 전용 Chromium 검사를 통과했다. 동의 누락/false는 질문과 설명 모두 작업·결과·모델 호출 없이 거절된다. 미체크, 체크 후 해제, 취소, Escape, 단축키, 스크립트의 form submit, 재검색, 새로고침, 처방 자료 업로드 취소를 검사했다. 동의 전 investigation 요청0·생성된 조사 작업0이며, 동의한 요청에만 cloudConsent:true를 전송한다. 확인창에는 지정된 문구와 동의/취소만 있고 추가 설정은 없다. 실제 NVIDIA에 사용자 자료를 전송하는 검사는 실행하지 않았다.
