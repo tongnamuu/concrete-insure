@@ -1,0 +1,3 @@
+workflow:
+  _type: insurelens_python
+  timeout_seconds: 600

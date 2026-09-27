@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+if [ -x .venv/bin/python ]; then
+    exec .venv/bin/python scripts/check-personal-paths.py
+fi
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 scripts/check-personal-paths.py
+fi
+printf '%s\n' 'Python is required for the personal path check; commit blocked.' >&2
+exit 1
