@@ -137,7 +137,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
 
     @asynccontextmanager
     async def lifespan(application):
-        diagnostics = RuntimeLog(root / 'logs')
+        diagnostics = RuntimeLog()
         application.state.diagnostics = diagnostics
         try:
             with log_context(diagnostics):

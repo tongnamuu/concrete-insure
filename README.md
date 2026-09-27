@@ -10,6 +10,7 @@ Python 3.12 또는 3.13, [uv](https://docs.astral.sh/uv/), Node.js 22.13 이상�
 
 ```sh
 uv sync --extra dev
+uv run python scripts/install-git-hooks.py
 npm ci
 # 처음 설치한 경우에만 .env.example을 .env로 복사합니다.
 # 기존 .env가 있으면 그대로 사용합니다.
@@ -76,9 +77,13 @@ sh scripts/scan-skills.sh
 
 ## 실행 로그와 코드 리뷰
 
-웹 서버의 로그는 `.local-data/logs/insurelens.jsonl`에 자동 저장합니다. 추가 환경변수 설정은 필요 없습니다. 요청·작업 ID로 처리 단계와 NVIDIA/PDF 소요 시간, 실패·취소를 확인할 수 있습니다. 파일당 5 MiB, 이전 파일 3개까지 순환 보관하며 사용자 입력·약관 원문·키는 기록하지 않습니다. [로깅 지침](docs/logging.md)을 따릅니다.
+웹 서버의 실행 로그는 서버를 실행한 터미널의 표준 오류(`stderr`)에 JSON 한 줄씩 출력합니다. 로그 파일은 생성하거나 저장하지 않으며 추가 환경변수 설정도 필요 없습니다. 요청·작업 ID로 처리 단계와 NVIDIA/PDF 소요 시간, 실패·취소를 확인할 수 있습니다. 사용자 입력·약관 원문·키·개인 경로는 기록하지 않습니다. [로깅 지침](docs/logging.md)을 따릅니다.
 
 코드 변경은 작업 브랜치에서 검증 후 PR로 제출합니다. 변경 내용과 테스트 결과를 PR에서 확인하고 병합 여부를 결정합니다. 작업 규칙은 [AGENTS.md](AGENTS.md)에 기록했습니다.
+
+저장소를 복제한 뒤 위 설치 명령으로 Git 훅을 반드시 설정합니다. 설정 후 `git commit` 직전에 **커밋에 포함될 전체 파일과 파일명**을 검사하고 개인 경로가 있거나 검사를 실행할 수 없으면 커밋을 차단합니다. 작업 폴더에서만 지우고 다시 스테이징하지 않은 경로도 차단합니다. macOS·Linux·Windows 홈 경로와 macOS 개인 임시 경로, URL 인코딩·UTF-16·심볼릭 링크 대상도 검사하며 발견한 경로 자체는 출력하지 않습니다.
+
+수동 점검은 `uv run python scripts/check-personal-paths.py`로 실행합니다. `--no-verify`나 훅 설정 해제로 검사를 우회하지 않습니다. 로컬 Git 설정은 복제 시 전달되지 않으므로 새 복제본마다 설치해야 하며, GitHub PR·푸시에서도 같은 검사를 다시 실행합니다. 경로 패턴으로 식별할 수 없는 사용자 지정 경로는 리뷰에서도 확인합니다.
 
 ## 지원 범위
 

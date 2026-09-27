@@ -1,6 +1,6 @@
 import asyncio
 import json
-from pathlib import Path
+from io import StringIO
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -16,12 +16,14 @@ from insurelens.store import Queue, Store
 SECRET = 'private-prescription-and-nvapi-secret'
 
 
-def rows(folder):
-    return [json.loads(line) for file in sorted(Path(folder).glob('*.jsonl*')) for line in file.read_text().splitlines()]
+def rows(stream):
+    return [json.loads(line) for line in stream.getvalue().splitlines()]
 
 
-def test_logs_rotate_are_private_and_drop_unapproved_values(tmp_path):
-    log = RuntimeLog(tmp_path / 'logs', max_bytes=800, backups=2)
+def test_console_logs_create_no_files_and_drop_unapproved_values(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    stream = StringIO()
+    log = RuntimeLog(stream=stream)
     for _ in range(30):
         with log_context(log, request_id=str(uuid4())):
             record('provider.response', category='nim', prompt_tokens=12, completion_tokens=3,
@@ -29,11 +31,10 @@ def test_logs_rotate_are_private_and_drop_unapproved_values(tmp_path):
                    messages=SECRET, headers={'Authorization': SECRET}, query=SECRET,
                    response=SECRET, filename=SECRET, code='bad\n'+SECRET)
     log.close()
-    files = list((tmp_path / 'logs').iterdir())
-    assert 1 < len(files) <= 3
-    assert all(file.stat().st_mode & 0o777 == 0o600 for file in files)
-    assert (tmp_path / 'logs').stat().st_mode & 0o777 == 0o700
-    for value in rows(tmp_path / 'logs'):
+    assert list(tmp_path.iterdir()) == []
+    assert len(rows(stream)) == 30
+    assert not stream.closed
+    for value in rows(stream):
         assert SECRET not in json.dumps(value)
         assert value['model'] == 'custom' and value['route'] == 'unmatched'
         assert value['prompt_tokens'] == 12 and 'total_tokens' not in value
@@ -41,7 +42,8 @@ def test_logs_rotate_are_private_and_drop_unapproved_values(tmp_path):
 
 
 async def test_queue_correlates_success_failure_and_cancelled_before_start(tmp_path):
-    log = RuntimeLog(tmp_path / 'logs')
+    stream = StringIO()
+    log = RuntimeLog(stream=stream)
     store = Store(tmp_path / 'store')
     queue = Queue(store)
     case = store.create('private-owner')
@@ -62,7 +64,7 @@ async def test_queue_correlates_success_failure_and_cancelled_before_start(tmp_p
                 tasks.append(queue.add(job, fn))
         queue.cancel(jobs[2])
         await asyncio.gather(*tasks, return_exceptions=True)
-        values = rows(tmp_path / 'logs')
+        values = rows(stream)
         assert SECRET not in json.dumps(values)
         assert {v['job_id'] for v in values} == set(jobs)
         for request_id, job, state in zip(request_ids, jobs, ['completed', 'failed', 'cancelled']):
@@ -89,7 +91,8 @@ async def test_real_sdk_logs_only_timings_usage_and_error_codes(tmp_path, status
             'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': '{"private":"'+SECRET+'"}'}}],
             'usage': {'prompt_tokens': 10, 'completion_tokens': 5, 'total_tokens': 15}})
     provider = Nvidia(env={'NVIDIA_API_KEY': SECRET}, transport=httpx.MockTransport(handler))
-    log = RuntimeLog(tmp_path / 'logs')
+    stream = StringIO()
+    log = RuntimeLog(stream=stream)
     try:
         with log_context(log, request_id=str(uuid4()), job_id=str(uuid4())):
             if status == 200:
@@ -97,7 +100,7 @@ async def test_real_sdk_logs_only_timings_usage_and_error_codes(tmp_path, status
             else:
                 with pytest.raises(AppError, match='NIM_AUTH_FAILED'):
                     await provider.chat([{'role': 'user', 'content': SECRET}])
-        values = rows(tmp_path / 'logs')
+        values = rows(stream)
         assert SECRET not in json.dumps(values)
         assert values[0]['event'] == 'operation.started'
         assert values[-1]['duration_ms'] >= 0
@@ -113,7 +116,8 @@ async def test_real_sdk_logs_only_timings_usage_and_error_codes(tmp_path, status
 
 
 async def test_cancellation_is_logged_and_context_does_not_leak(tmp_path):
-    log = RuntimeLog(tmp_path / 'logs')
+    stream = StringIO()
+    log = RuntimeLog(stream=stream)
     started = asyncio.Event()
     async def run():
         async with measured('nim', 'chat'):
@@ -125,14 +129,16 @@ async def test_cancellation_is_logged_and_context_does_not_leak(tmp_path):
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    before = log.path.read_text()
+    before = stream.getvalue()
     record('app.started')  # Restored outside the scope: no process-global logger.
-    assert log.path.read_text() == before
-    assert rows(tmp_path / 'logs')[-1]['event'] == 'operation.cancelled'
+    assert stream.getvalue() == before
+    assert rows(stream)[-1]['event'] == 'operation.cancelled'
     log.close()
 
 
-async def test_http_job_correlation_no_bodies_cookies_or_raw_paths(tmp_path):
+async def test_http_job_correlation_no_bodies_cookies_or_raw_paths(tmp_path, monkeypatch):
+    stream = StringIO()
+    monkeypatch.setattr('sys.stderr', stream)
     async def investigate(emit, **kwargs):
         emit('stage_progress', {'stage': 'input', 'elapsedSeconds': 5, 'message': SECRET})
         async with measured('nim', 'chat'):
@@ -156,14 +162,15 @@ async def test_http_job_correlation_no_bodies_cookies_or_raw_paths(tmp_path):
         assert bad.status_code == 400
         denied = await client.post('/api/cases', headers={'Origin': 'https://'+SECRET})
         assert denied.status_code == 403 and denied.headers['X-Request-ID']
-        values = rows(tmp_path / 'logs')
+        values = rows(stream)
         assert SECRET not in json.dumps(values)
         job_rows = [v for v in values if v.get('job_id') == job_id]
         assert job_rows and all(v['request_id'] == request_id for v in job_rows)
         http_row = next(v for v in values if v['event'] == 'request.completed' and v['request_id'] == request_id)
         assert http_row['status'] == 202 and http_row['route'] == '/api/cases/{identifier}/investigations'
         assert any(v['event'] == 'job.stage' and v['elapsed_seconds'] == 5 for v in job_rows)
-    assert rows(tmp_path / 'logs')[-1]['event'] == 'app.stopped'
+    assert rows(stream)[-1]['event'] == 'app.stopped'
+    assert not (tmp_path / 'logs').exists()
 
 
 def test_restart_records_interrupted_job_without_user_data(tmp_path):
@@ -171,11 +178,12 @@ def test_restart_records_interrupted_job_without_user_data(tmp_path):
     case = store.create(SECRET)
     job = store.create_job(case['id'], 'investigation')
     store.close()
-    log = RuntimeLog(tmp_path / 'logs')
+    stream = StringIO()
+    log = RuntimeLog(stream=stream)
     with log_context(log):
         store = Store(tmp_path / 'data')
-    assert len(rows(tmp_path / 'logs')) == 1
-    value = rows(tmp_path / 'logs')[0]
+    assert len(rows(stream)) == 1
+    value = rows(stream)[0]
     assert value['event'] == 'job.finished' and value['job_id'] == job and value['code'] == 'SERVER_RESTARTED'
     assert SECRET not in json.dumps(value)
     store.close()
@@ -186,15 +194,16 @@ async def test_nim_timeout_is_recorded_with_elapsed_time(tmp_path):
     async def handler(request):
         await asyncio.Event().wait()
     provider = Nvidia(env={'NVIDIA_API_KEY': SECRET}, transport=httpx.MockTransport(handler))
-    log = RuntimeLog(tmp_path / 'logs')
+    stream = StringIO()
+    log = RuntimeLog(stream=stream)
     try:
         with log_context(log, request_id=str(uuid4())):
             with pytest.raises(AppError, match='NIM_TIMEOUT'):
                 await provider.chat([{'role': 'user', 'content': SECRET}], timeout=.02)
-        value = rows(tmp_path / 'logs')[-1]
+        value = rows(stream)[-1]
         assert value['event'] == 'operation.failed' and value['code'] == 'NIM_TIMEOUT'
         assert value['duration_ms'] >= 10 and value['timeout_seconds'] == .02
-        assert SECRET not in json.dumps(rows(tmp_path / 'logs'))
+        assert SECRET not in json.dumps(rows(stream))
     finally:
         await provider.close()
         log.close()

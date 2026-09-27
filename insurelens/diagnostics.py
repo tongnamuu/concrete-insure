@@ -1,14 +1,11 @@
-"""Bounded, structured diagnostics. Never accept request/response bodies."""
+"""Console-only structured diagnostics. Never accept request/response bodies."""
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 import json
 import logging
-from logging.handlers import RotatingFileHandler
 import math
-import os
-from pathlib import Path
 import re
 import time
 from uuid import UUID
@@ -63,22 +60,12 @@ def safe_fields(fields):
     return result
 
 
-class PrivateRotatingHandler(RotatingFileHandler):
-    def _open(self):
-        fd = os.open(self.baseFilename, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-        os.fchmod(fd, 0o600)
-        return os.fdopen(fd, self.mode, encoding=self.encoding)
-
-
 class RuntimeLog:
-    def __init__(self, folder, *, max_bytes=5 * 1024 * 1024, backups=3):
-        folder = Path(folder)
-        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-        folder.chmod(0o700)
-        self.path = folder / 'insurelens.jsonl'
+    def __init__(self, *, stream=None):
+        # StreamHandler defaults to stderr and never creates a log file.
         self.logger = logging.Logger('insurelens.runtime', level=logging.INFO)
         self.logger.propagate = False
-        self.handler = PrivateRotatingHandler(self.path, maxBytes=max_bytes, backupCount=backups, encoding='utf-8')
+        self.handler = logging.StreamHandler(stream)
         self.handler.setFormatter(logging.Formatter('%(message)s'))
         self.logger.addHandler(self.handler)
 
