@@ -17,7 +17,7 @@ const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECU
 const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
  await page.goto(base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('test-policy.pdf',{timeout:30000});
- await page.locator('#description').fill('조플루자를 처방받았습니다.');await page.locator('#searchDescription').click();await acceptConsent(page);
+ await page.locator('#query').fill('조플루자를 처방받았습니다.');await page.locator('#send').click();await acceptConsent(page);
  await expect(page.locator('.coverage-status')).toHaveText('약관에 관련 보장 항목이 명시되어 있습니다.',{timeout:60000});
  await expect(page.locator('.coverage-link')).toContainText('성분 근거를 통한 간접 연결');await expect(page.locator('.coverage-link')).toContainText('조플루자 → 발록사비르');await expect(page.locator('.coverage-caution')).toContainText('실제 보장은');
  await expect(page.locator('.coverage-panel')).not.toContainText('다른 질병');

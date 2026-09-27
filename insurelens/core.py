@@ -24,12 +24,13 @@ DrugId = Annotated[str, StringConstraints(strict=True, pattern=r"^\d{5,20}$")]
 
 class QueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    query: str = Field(default="", max_length=2000)
+    query: str = Field(default="", max_length=4000)
     description: str = Field(default="", max_length=4000)
     confirmedTerms: list[Term] = Field(default_factory=list, max_length=20)
     drugIds: list[DrugId] = Field(default_factory=list, max_length=5)
     cloudConsent: bool = False
     translation: bool = False
+    conversationId: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")] | None = None
 
     @field_validator("confirmedTerms")
     @classmethod
@@ -68,7 +69,7 @@ def literal_terms(query, confirmed=None):
     return list(dict.fromkeys(t for t in list(confirmed or []) + derived if t.strip() and len(t) <= 120))[:25]
 
 
-def grounded_terms(raw, query, confirmed=None, description=""):
+def grounded_terms(raw, query, confirmed=None, description="", *, context=()):
     try:
         value = json.loads(raw)
     except (TypeError, ValueError):
@@ -76,7 +77,7 @@ def grounded_terms(raw, query, confirmed=None, description=""):
     ensure(isinstance(value, dict) and set(value) == {"terms"}, "INVALID_TERMS")
     terms = value["terms"]
     ensure(isinstance(terms, list) and len(terms) <= 25 and all(isinstance(t, str) and t.strip() and len(t) <= 120 for t in terms), "INVALID_TERMS")
-    ensure(all(t in query or t in description or t in (confirmed or []) for t in terms), "UNGROUNDED_TERM")
+    ensure(all(t in query or t in description or t in (confirmed or []) or any(t in source for source in context) for t in terms), "UNGROUNDED_TERM")
     return terms
 
 

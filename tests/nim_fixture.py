@@ -48,3 +48,26 @@ class ScriptedNim:
 
     async def close(self):
         pass
+
+
+class ConversationNim(ScriptedNim):
+    """Explicit follow-up fixture that requires real server context to resolve a referent."""
+    def __init__(self):
+        super().__init__()
+        self.inputs = []
+        self.plans = []
+
+    async def chat(self, messages, model=None, **kwargs):
+        value = json.loads(messages[-1]['content'])
+        self.inputs.append(value)
+        if value.get('query') == '실패 요청':
+            raise AppError('NIM_TIMEOUT', 504)
+        if value.get('query') == '그 경우 제외사항은?':
+            history = value.get('conversation', [])
+            terms = history[-1]['terms'] + ['제외사항'] if history else []
+            return json.dumps({'terms': list(dict.fromkeys(terms))[:25]}, ensure_ascii=False)
+        return await super().chat(messages, model, **kwargs)
+
+    async def complete(self, messages, tools):
+        self.plans.append(json.loads(next(m['content'] for m in messages if m['role'] == 'user')))
+        return await super().complete(messages, tools)

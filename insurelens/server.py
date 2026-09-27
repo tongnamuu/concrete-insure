@@ -215,6 +215,18 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
     async def get_case(identifier: UUID, request: Request):
         return public_case(case_for(identifier, request))
 
+    @app.get("/api/cases/{identifier}/conversation")
+    async def get_conversation(identifier: UUID, request: Request):
+        case = case_for(identifier, request)
+        return app.state.store.conversation(case['id'], case['document']['id']) if case['document'] else {"id": None, "turns": []}
+
+    @app.post("/api/cases/{identifier}/conversation", status_code=201)
+    async def new_conversation(identifier: UUID, request: Request):
+        case = case_for(identifier, request)
+        ensure(case['document'], "DOCUMENT_REQUIRED", 409)
+        ensure(all(j['state'] not in ('queued','running') for j in app.state.store.jobs(case['id'])), "CASE_BUSY", 429)
+        return app.state.store.new_conversation(case['id'], case['document']['id'])
+
     @app.delete("/api/cases/{identifier}", status_code=204)
     async def remove_case(identifier: UUID, request: Request):
         case = case_for(identifier, request)
@@ -336,10 +348,21 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
         ensure(body.cloudConsent, "NIM_CONSENT_REQUIRED", 409)
         ensure(all(i in case["products"] for i in body.drugIds), "DRUG_SELECTION_REQUIRED")
         products = [case["products"][i] for i in body.drugIds]
-        job_id = app.state.store.create_job(case["id"], "investigation", case["document"]["id"])
+        store = app.state.store
+        ensure(all(j['state'] not in ('queued','running') for j in store.jobs(case['id'])), "CASE_BUSY", 429)
+        context = None
+        if body.conversationId:
+            from insurelens.conversation import model_context
+            conversation = store.conversation(case['id'], case['document']['id'])
+            ensure(conversation['id'] == body.conversationId, "CONVERSATION_CHANGED", 409)
+            ensure(len(conversation['turns']) < 50, "CONVERSATION_TURN_LIMIT", 429)
+            context = model_context(conversation['turns'])
+        job_id = store.create_job(case["id"], "investigation", case["document"]["id"])
+        if body.conversationId:
+            store.add_turn(body.conversationId, job_id, body.model_dump())
 
         async def run(emit):
-            return await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, emit=emit, operation=pdf)
+            return await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, emit=emit, operation=pdf, **({'conversation': context} if context is not None else {}))
 
         app.state.queue.add(job_id, run)
         return {"jobId": job_id}

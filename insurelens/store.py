@@ -28,6 +28,11 @@ class Store:
             CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,case_id TEXT NOT NULL,kind TEXT NOT NULL,state TEXT NOT NULL,result TEXT,error TEXT,created INTEGER NOT NULL,document_id TEXT);
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,job_id TEXT NOT NULL,event TEXT NOT NULL,data TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS event_job ON events(job_id,id);
+            CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,case_id TEXT NOT NULL,document_id TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS turns(job_id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL,input TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS conversation_case ON conversations(case_id,document_id);
+            CREATE INDEX IF NOT EXISTS turn_conversation ON turns(conversation_id);
+
         """)
         for row in self.db.execute("SELECT id FROM jobs WHERE state IN ('running','queued')").fetchall():
             self.state(row["id"], "failed", error="SERVER_RESTARTED")
@@ -79,9 +84,33 @@ class Store:
     def events(self, identifier, after=0):
         return [{**dict(r), "data": json.loads(r["data"])} for r in self.db.execute("SELECT id,event,data FROM events WHERE job_id=? AND id>? ORDER BY id", (identifier, after))]
 
+    def conversation(self, case_id, document_id):
+        row = self.db.execute("SELECT id FROM conversations WHERE case_id=? AND document_id=? ORDER BY rowid DESC LIMIT 1", (case_id, document_id)).fetchone()
+        if row is None:
+            return {"id": None, "turns": []}
+        turns = []
+        for item in self.db.execute("SELECT turns.input,jobs.* FROM turns JOIN jobs ON jobs.id=turns.job_id WHERE conversation_id=? ORDER BY turns.rowid", (row['id'],)):
+            request = json.loads(item['input'])
+            turns.append({"jobId": item['id'], "query": request['query'], "description": request['description'],
+                          "confirmedTerms": request['confirmedTerms'], "state": item['state'], "error": item['error'],
+                          "result": json.loads(item['result']) if item['result'] else None})
+        return {"id": row['id'], "turns": turns}
+
+    def new_conversation(self, case_id, document_id):
+        ensure(self.db.execute("SELECT count(*) FROM conversations WHERE case_id=?", (case_id,)).fetchone()[0] < 100, "CONVERSATION_LIMIT", 429)
+        identifier = str(uuid4())
+        self.db.execute("INSERT INTO conversations VALUES(?,?,?)", (identifier, case_id, document_id))
+        return {"id": identifier, "turns": []}
+
+    def add_turn(self, conversation_id, job_id, request):
+        # Persist user text and explicitly confirmed candidates, never credentials or consent tokens.
+        self.db.execute("INSERT INTO turns VALUES(?,?,?)", (job_id, conversation_id, encoded({k: request[k] for k in ('query','description','confirmedTerms')})))
+
     def remove(self, identifier):
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            self.db.execute("DELETE FROM turns WHERE conversation_id IN (SELECT id FROM conversations WHERE case_id=?)", (identifier,))
+            self.db.execute("DELETE FROM conversations WHERE case_id=?", (identifier,))
             self.db.execute("DELETE FROM events WHERE job_id IN (SELECT id FROM jobs WHERE case_id=?)", (identifier,))
             self.db.execute("DELETE FROM jobs WHERE case_id=?", (identifier,))
             self.db.execute("DELETE FROM cases WHERE id=?", (identifier,))

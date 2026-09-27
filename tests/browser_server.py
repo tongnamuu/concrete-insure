@@ -16,3 +16,8 @@ def create_slow_test_app():
             await asyncio.sleep(7)
             return await super().chat(messages, model, **kwargs)
     return create_app(root=os.environ['DATA_DIR'], nim=SlowNim(), drugs=SimpleNamespace(enabled=False))
+
+
+def create_conversation_test_app():
+    from tests.nim_fixture import ConversationNim
+    return create_app(root=os.environ['DATA_DIR'], nim=ConversationNim(), drugs=SimpleNamespace(enabled=False))

@@ -7,6 +7,7 @@ The final user specification supersedes the earlier claim-screening proposal: no
 | Module | Implementation | Input/output contract |
 |---|---|---|
 | Intake and job API | insurelens/server.py,insurelens/store.py | Authenticated case-scoped uploads and jobs, replayable SSE |
+| Conversation context | insurelens/conversation.py,insurelens/store.py | Server-owned successful turns and bounded prior source excerpts → follow-up context |
 | Document worker | insurelens/pdf.py,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
 | Prescription reading | Nvidia.ocr, PDF text/render tools | Image or prescription PDF → draft text requiring confirmation |
 | Input subagent | insurelens/agents/input.py | User query/situation description/confirmed text → literal terms |
@@ -29,7 +30,7 @@ Translation: optional separately configured model supplies English glosses to th
 
 ## Persistence and events
 
-SQLite stores cases, official product lookup records, job state/results and event IDs. Original PDF/index files stay under a mode0700 local data directory. Browser reconnect replays SSE event IDs; completion fetches persisted results. Jobs run in a bounded in-process serial queue; PDF work runs in a killable subprocess. A process restart preserves completed results and marks interrupted jobs SERVER_RESTARTED for explicit retry. This is not a distributed, automatically resumed queue. User deletion removes case files and persisted results. Cookie ownership is for a local single-user demo, not production account authentication.
+SQLite stores cases, official product lookup records, job state/results, event IDs, document-scoped conversations and original user turns. A single composer sends new messages. The latest four successful turns and bounded source excerpts provide context; the browser cannot submit arbitrary history. Every follow-up requires fresh NVIDIA consent. Refresh restores the active conversation, while new conversation/PDF replacement isolates subsequent messages. Prior excerpts are context only; displayed quotes must be freshly retrieved and verified. Original PDF/index files stay under a mode0700 local data directory. Browser reconnect replays SSE event IDs; completion fetches persisted results. Jobs run in a bounded in-process serial queue; PDF work runs in a killable subprocess. A process restart preserves completed results and marks interrupted jobs SERVER_RESTARTED for explicit retry. This is not a distributed, automatically resumed queue. User deletion removes case files and persisted results. Cookie ownership is for a local single-user demo, not production account authentication.
 
 ## PDF contract
 
