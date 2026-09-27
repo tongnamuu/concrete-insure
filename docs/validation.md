@@ -8,7 +8,7 @@
 
 
 - 잠금 파일 설치: `uv sync --extra dev --locked`, `npm ci --ignore-scripts` 성공. npm 의존성 검사 시 취약점0.
-- Python 전체 검사: **110 passed, 20 subtests passed**, 실패0. PDF 원문·좌표·회전/CropBox·표준 주석, SDK 요청·응답 형식, 입력 규약, 성분 출처, ReAct 도구 제한, 번역 경계, 보장 항목 근거, 빈 결과 제거, 세션 격리, SSE 재생, 취소·재시작, 세 스킬 CLI 포함.
+- Python 전체 검사: **118 passed, 20 subtests passed**, 실패0. PDF 원문·좌표·회전/CropBox·표준 주석, SDK 요청·응답 형식, 입력 규약, 성분 출처, ReAct 도구 제한, 번역 경계, 보장 항목 근거, 빈 결과 제거, 세션 격리, SSE 재생, 취소·재시작, 세 스킬 CLI 포함.
 - 실제 NAT runtime 검사8개: Python 직접 호출, 콜백 전달, ContextVar 분리, 불투명 토큰 입력, 취소, provider 오류 타입 보존. Node 실행이나 HTTP 중계가 없다. NAT를 필수 의존성으로 설치하며 auto/direct/local 실행 분기를 제거했다.
 - SDK 검사는 실제 AsyncNeMoMicroservices와 HTTP MockTransport를 사용해 인증 헤더·URL의 단일 `/v1`·JSON mode·native tool definitions·finish_reason·취소·오류 코드를 확인한다.
 - 이전 커밋 cfd486e의 실제 NVIDIA API + Python SDK + NAT ReAct 호출: 공개 약품명과 합성 약관만 사용, **23.30초**, `mode=nim-react`, warnings없음, 원문9건과 제품 근거1건. 테스트용 약관 서식의 보장 연결 상태는 unresolved였으며 지급 판단을 생성하지 않았다. 실제 사용자 의료자료·약관은 외부 전송하지 않았다.
@@ -53,3 +53,9 @@ SkillSpector2.12.0의 `--recursive --no-llm` 정적 검사 결과는 [skillspect
 수정한 코드의 실제 NeMo SDK → hosted Nemotron 및 NAT 전체 실행은 공개 약품명과 합성 PDF로 검증했다. **입력 확인 4.9초, 전체 16.46초**, `mode=nim-react`, 원문4건·제품 근거1건·빈 원문0건이었다. 별도 구조화 요청 비교에서는 9.86초와 14.07초가 관측됐다. 외부 서비스의 지연 변동이 있으므로 처리 시간 보장은 아니다. 사용자 약관·의료자료는 외부에 전송하지 않았다.
 
 SSE는 모델 대기 중 5초마다 `stage_progress`와 `elapsedSeconds`를 보내고, 각 모델 호출 완료 시 소요 시간을 기록한다. 입력 추출·검색 계획·선택적 번역 대기를 구분하며 모델의 추론 내용이나 미검증 응답은 내보내지 않는다. 진행 중 취소 시 제공자 호출이 취소되는지, 기한 초과 시 재시도하지 않는지, 스키마와 다른 답변 및 원문에 없는 질병명을 거절하는지 Python 검사로 확인했다. Chromium 진행 검사에서 대기 표시 → 취소 → 결과 없음 → 새 검색 완료를 확인했다.
+
+## 구조화 실행 로그와 PR 작업
+
+Python 전체 검사118개와20개 하위 검사를 통과했다. 신규 로그 검사8개는 파일 순환·0600 권한, 요청/작업 ID 연결, 성공·실패·취소·재시작, NIM 응답 토큰 수·시간 초과 및 입력/키 제외를 확인했다. SDK 로그 검사는 HTTP MockTransport를 사용했고 추가 사용자 자료의 외부 전송은 없다. Chromium 진행 검사에서 SSE 대기 갱신, 취소 후 결과 없음, 다음 검색 완료를 확인했다.
+
+실행 로그는 `.local-data/logs/insurelens.jsonl`에 저장하며 파일당5 MiB와 이전3개 파일로 제한한다. 로그 읽기와 이벤트 의미는 [logging.md](logging.md)에 있다. 앞으로의 코드 변경은 [AGENTS.md](../AGENTS.md)에 따라 작업 브랜치와 PR로 제공한다.

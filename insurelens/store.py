@@ -8,6 +8,7 @@ import time
 from uuid import uuid4
 
 from .core import ensure
+from .diagnostics import failure_fields, log_context, record
 
 
 def encoded(value):
@@ -31,6 +32,7 @@ class Store:
         for row in self.db.execute("SELECT id FROM jobs WHERE state IN ('running','queued')").fetchall():
             self.state(row["id"], "failed", error="SERVER_RESTARTED")
             self.event(row["id"], "failed", {"code": "SERVER_RESTARTED"})
+            record("job.finished", job_id=row["id"], state="failed", code="SERVER_RESTARTED")
 
     def create(self, owner):
         ensure(self.db.execute("SELECT count(*) FROM cases").fetchone()[0] < 30, "CASE_LIMIT", 429)
@@ -99,30 +101,42 @@ class Queue:
         self.controls = {}
 
     def add(self, identifier, fn):
+        submitted = time.monotonic()
+
+        def emit(event, data):
+            self.store.event(identifier, event, data)
+            if event in {'stage_started', 'stage_progress', 'stage_completed'}:
+                record('job.stage', stage_event=event, stage=data.get('stage'), elapsed_seconds=data.get('elapsedSeconds'))
+
         async def run():
             async with self.lock:
+                record("job.started", wait_ms=(time.monotonic()-submitted)*1000)
                 self.store.state(identifier, "running")
-                result = await fn(lambda event, data: self.store.event(identifier, event, data))
+                result = await fn(emit)
                 self.store.state(identifier, "completed", result)
                 self.store.event(identifier, "completed", {"resultUrl": f"/api/jobs/{identifier}"})
-
-        task = asyncio.create_task(run(), name=f"insurelens:{identifier}")
-        self.controls[identifier] = task
 
         def finished(done):
             self.controls.pop(identifier, None)
             if done.cancelled():
                 state, code = "cancelled", "CANCELLED"
             elif error := done.exception():
-                state, code = "failed", str(error)
+                state, code = "failed", failure_fields(error)["code"]
                 if not re.fullmatch(r"[A-Z_]{3,80}", code):
                     code = "PROCESSING_FAILED"
             else:
+                record("job.finished", state="completed", duration_ms=(time.monotonic()-submitted)*1000)
                 return
+            record("job.finished", state=state, code=code, duration_ms=(time.monotonic()-submitted)*1000,
+                   error_type=type(error).__name__ if not done.cancelled() else "CancelledError")
             self.store.state(identifier, state, error=code)
             self.store.event(identifier, state, {"code": code})
 
-        task.add_done_callback(finished)
+        with log_context(job_id=identifier):
+            record('job.queued')
+            task = asyncio.create_task(run(), name=f'insurelens:{identifier}')
+            self.controls[identifier] = task
+            task.add_done_callback(finished)
         return task
 
     def cancel(self, identifier):

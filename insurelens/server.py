@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import time
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
@@ -22,6 +23,7 @@ from .core import AppError, DrugLookupRequest, QueryRequest, ensure
 from .pdf import pdf_operation
 from .store import Queue, Store
 from .nat import configured_investigation
+from .diagnostics import RuntimeLog, failure_fields, log_context, record
 
 ROOT = Path(__file__).resolve().parents[1]
 SECURITY_HEADERS = {
@@ -50,6 +52,7 @@ class LocalBoundary:
             length = headers.get("content-length", "0")
             ensure(length.isdecimal() and int(length) <= limit, "FILE_TOO_LARGE" if multipart else "REQUEST_TOO_LARGE", 413)
         except AppError as error:
+            record("request.error", status=error.status, **failure_fields(error))
             return await JSONResponse({"error": error.code}, error.status, headers=SECURITY_HEADERS)(scope, receive, send)
         cookies = Request(scope).cookies
         owner = cookies.get("insurelens_session", "")
@@ -83,6 +86,42 @@ class LocalBoundary:
         await self.app(scope, bounded_receive, secure_send)
 
 
+class RequestLogging:
+    """Correlate background jobs with requests without reading bodies or URLs."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            return await self.app(scope, receive, send)
+        request_id = str(uuid4())
+        scope.setdefault('state', {})['request_id'] = request_id
+        logger = getattr(scope['app'].state, 'diagnostics', None)
+        status = 500
+        started = time.monotonic()
+
+        async def logged_send(message):
+            nonlocal status
+            if message['type'] == 'http.response.start':
+                status = message['status']
+                MutableHeaders(scope=message)['X-Request-ID'] = request_id
+            await send(message)
+
+        with log_context(logger, request_id=request_id):
+            try:
+                await self.app(scope, receive, logged_send)
+            except asyncio.CancelledError:
+                status = 499
+                raise
+            except Exception as error:
+                record('request.error', status=500, **failure_fields(error))
+                raise
+            finally:
+                record('request.completed', method=scope['method'],
+                       route=getattr(scope.get('route'), 'path', None), status=status,
+                       duration_ms=(time.monotonic()-started)*1000)
+
+
 def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigate=None):
     from .providers import Nvidia, Drugs
     if nim is None:
@@ -98,7 +137,15 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
 
     @asynccontextmanager
     async def lifespan(application):
-        store = Store(root)
+        diagnostics = RuntimeLog(root / 'logs')
+        application.state.diagnostics = diagnostics
+        try:
+            with log_context(diagnostics):
+                store = Store(root)
+        except BaseException:
+            diagnostics.close()
+            raise
+        diagnostics.write('app.started')
         application.state.store = store
         application.state.queue = Queue(store)
         application.state.exports = 0
@@ -113,26 +160,32 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
                     if inspect.isawaitable(outcome):
                         await outcome
             store.close()
+            diagnostics.write("app.stopped")
+            diagnostics.close()
 
     app = FastAPI(title="InsureLens", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(LocalBoundary)
+    app.add_middleware(RequestLogging)
 
     @app.exception_handler(AppError)
     async def app_error(request, error):
+        record("request.error", status=error.status, **failure_fields(error))
         return JSONResponse({"error": error.code}, error.status)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):
+        record("request.error", status=400, code="INVALID_REQUEST")
         return JSONResponse({"error": "INVALID_REQUEST"}, 400)
 
     @app.exception_handler(HTTPException)
     async def http_error(request, error):
         code = error.detail if isinstance(error.detail, str) and re.fullmatch(r"[A-Z_]{3,80}", error.detail) else "REQUEST_FAILED"
+        record("request.error", status=error.status_code, code=code)
         return JSONResponse({"error": code}, error.status_code)
 
     @app.exception_handler(Exception)
     async def internal_error(request, error):
-        return JSONResponse({"error": "REQUEST_FAILED"}, 500)
+        return JSONResponse({"error": "REQUEST_FAILED"}, 500, headers={"X-Request-ID": request.state.request_id})
 
     def case_for(identifier, request):
         ensure(str(identifier) not in app.state.deleting, "CASE_BUSY", 409)

@@ -18,6 +18,7 @@ from nemo_microservices import AsyncNeMoMicroservices, APIStatusError, APITimeou
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .core import AppError, ensure
+from .diagnostics import measured, record
 
 LIMIT = 4_000_000
 
@@ -30,8 +31,14 @@ def _nim_error(status):
 
 
 async def _json_request(client, method, url, service='PROVIDER', **kwargs):
+    async with measured('ocr' if service == 'NIM' else 'mfds', 'http'):
+        return await _send_json_request(client, method, url, service=service, **kwargs)
+
+
+async def _send_json_request(client, method, url, service='PROVIDER', **kwargs):
     try:
         async with client.stream(method, url, **kwargs) as response:
+            record('provider.response', category='ocr' if service == 'NIM' else 'mfds', status=response.status_code)
             if not 200 <= response.status_code < 300:
                 if service == 'NIM':
                     raise _nim_error(response.status_code)
@@ -93,6 +100,11 @@ class Nvidia:
         return {'chat_template_kwargs': {'enable_thinking': False}} if re.match(r'^nvidia/nemotron-(?:3(?:[.-]|$)|nano-3)', model) else {}
 
     async def _completion(self, messages, model, *, tools=None, response_schema=None, timeout=60):
+        async with measured('nim', 'tools' if tools is not None else 'chat', model=model,
+                            timeout_seconds=timeout, response_mode='tools' if tools is not None else ('schema' if response_schema is not None else 'json')):
+            return await self._send_completion(messages, model, tools=tools, response_schema=response_schema, timeout=timeout)
+
+    async def _send_completion(self, messages, model, *, tools=None, response_schema=None, timeout=60):
         ensure(self.enabled, 'NVIDIA_KEY_REQUIRED', 409)
         kwargs = dict(model=model, messages=messages, temperature=0,
                       max_tokens=1500 if tools is not None else 1000, stream=False)
@@ -119,10 +131,14 @@ class Nvidia:
             ensure(isinstance(choices, list) and bool(choices) and isinstance(choices[0], dict), 'NIM_INVALID_RESPONSE', 502)
             choice = choices[0]
             ensure(isinstance(choice.get('finish_reason'), str) and isinstance(choice.get('message'), dict), 'NIM_INVALID_RESPONSE', 502)
+            usage = result.get('usage') if isinstance(result.get('usage'), dict) else {}
+            record('provider.response', category='nim', finish_reason=choice['finish_reason'],
+                   **{name: usage.get(name) for name in ('prompt_tokens', 'completion_tokens', 'total_tokens')})
             return {'finish_reason': choice['finish_reason'], 'message': choice['message']}
         except (APITimeoutError, TimeoutError):
             raise AppError('NIM_TIMEOUT', 504) from None
         except APIStatusError as exc:
+            record('provider.response', category='nim', status=exc.status_code)
             raise _nim_error(exc.status_code) from None
         except APIConnectionError:
             raise AppError('NIM_UNAVAILABLE', 502) from None

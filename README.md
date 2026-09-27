@@ -74,6 +74,12 @@ sh scripts/scan-skills.sh
 
 브라우저 검사는 자체 임시 저장소와 합성 PDF를 사용합니다. 시스템 Chromium을 쓰려면 `BROWSER_EXECUTABLE`을 지정하세요. 없으면 `npx playwright install chromium`으로 설치합니다. [검증 기록](docs/validation.md)에 실제 실행 결과와 미검증 기능을 구분합니다.
 
+## 실행 로그와 코드 리뷰
+
+웹 서버의 로그는 `.local-data/logs/insurelens.jsonl`에 자동 저장합니다. 추가 환경변수 설정은 필요 없습니다. 요청·작업 ID로 처리 단계와 NVIDIA/PDF 소요 시간, 실패·취소를 확인할 수 있습니다. 파일당 5 MiB, 이전 파일 3개까지 순환 보관하며 사용자 입력·약관 원문·키는 기록하지 않습니다. [로그 확인 방법](docs/logging.md)을 참고하세요.
+
+코드 변경은 작업 브랜치에서 검증 후 PR로 제출합니다. 변경 내용과 테스트 결과를 PR에서 확인하고 병합 여부를 결정합니다. 작업 규칙은 [AGENTS.md](AGENTS.md)에 기록했습니다.
+
 ## 지원 범위
 
 - 약관: 20MiB·1000쪽·200만 문자. 원문을 보장하기 위해 텍스트 레이어 없는 약관은 거절합니다. 처방 자료는 8MiB·8쪽, 이미지 2500만 픽셀까지입니다.

@@ -6,12 +6,18 @@ from pathlib import Path
 import sys
 
 from .core import AppError
+from .diagnostics import measured
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKER = ROOT / "python" / "pdf_worker.py"
 
 
 async def pdf_operation(payload, *, timeout=120, python=None, worker=None):
+    async with measured('pdf', payload.get('op', 'unknown'), timeout_seconds=timeout):
+        return await _pdf_operation(payload, timeout=timeout, python=python, worker=worker)
+
+
+async def _pdf_operation(payload, *, timeout=120, python=None, worker=None):
     process = None
     try:
         process = await asyncio.create_subprocess_exec(
