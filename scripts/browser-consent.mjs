@@ -15,7 +15,7 @@ const page=await browser.newPage({viewport:{width:1280,height:900}});
 const requests=[],ocr=[],errors=[];
 page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/investigations'))requests.push(r.postDataJSON());if(r.method()==='POST'&&r.url().endsWith('/ocr'))ocr.push(r.url());});
 page.on('pageerror',e=>errors.push(e.message));
-const consentText='NVIDIA 서비스로 현재·이전 대화의 질문·상황 설명·검색 후보·약관 발췌문 또는 처방 이미지를 전송하는 데 동의합니다.';
+const consentText='NVIDIA 서비스로 현재·이전 대화의 질문·상황 설명·검색 후보·약관 발췌문 또는 처방 이미지를 전송하는 데 동의합니다. 의약품 조회 시 약품명과 품목코드는 식품의약품안전처 API로 전송됩니다.';
 async function unchangedJobs(count){const id=await page.evaluate(()=>localStorage.getItem('insure-lens-case'));const response=await page.request.get(`${server.base}/api/cases/${id}`);assert.equal((await response.json()).jobs.filter(j=>j.kind==='investigation').length,count);}
 try{
  await page.goto(server.base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
@@ -32,6 +32,6 @@ try{
  await page.locator('#send').click();await acceptConsent(page);await expect(page.locator('.investigation-result')).toHaveCount(1,{timeout:30000});assert.equal(requests.length,1);assert.equal(requests[0].cloudConsent,true);assert.equal(requests[0].translation,false);
  await page.locator('#query').fill('인플루엔자');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cancelConsent').click();await unchangedJobs(1);assert.equal(requests.length,1);await expect(page.locator('.investigation-result')).toHaveCount(1);
  await page.locator('#medicalFile').setInputFiles(pdf);await expect(page.locator('#consentDialog')).toBeVisible();await page.locator('#cancelConsent').click();assert.equal(ocr.length,0);
- await page.reload();await expect(page.locator('#documentName')).toHaveText('policy.pdf');await page.locator('#query').fill('독감');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cancelConsent').click();assert.equal(requests.length,1);assert.deepEqual(errors,[]);
+ await page.reload();await expect(page.locator('#documentName')).toHaveText('policy.pdf');await page.locator('#query').fill('독감');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cancelConsent').click();assert.equal(requests.length,1);await page.locator('.drug-section summary').click();await page.locator('#drugName').fill('시험약');await page.locator('#drugForm button').click();await expect(page.locator('#error')).toContainText('식약처 API 키');await expect(page.locator('#error')).toContainText('README');assert.deepEqual(errors,[]);
  console.log(JSON.stringify({ok:true,uncheckedBlocked:true,cancelBlocked:true,shortcutBlocked:true,freshConsentEachSearch:true,noRequestOrResultBeforeConsent:true,ocrCancelBlocked:true,reloadDoesNotRememberConsent:true,browserErrors:errors}));
 }finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

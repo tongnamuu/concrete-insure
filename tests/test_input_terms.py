@@ -93,7 +93,7 @@ async def test_nonmedical_narratives_keep_explicit_terms_and_original_statement(
             assert data=={'query':'','description':description,'confirmedTerms':[]}
             return json.dumps({'terms':selected},ensure_ascii=False)
     result=await understand_input_with_model({'description':description,'cloudConsent':True},Nim())
-    assert result=={'query':'','description':description,'terms':selected}
+    assert result=={'query':'','description':description,'terms':selected,'drugNames':[]}
 
 
 @pytest.mark.asyncio

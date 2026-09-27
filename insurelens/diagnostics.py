@@ -16,7 +16,7 @@ _context = ContextVar('insurelens_diagnostics', default={})
 EVENTS = {'app.started', 'app.stopped', 'request.completed', 'request.error',
           'job.queued', 'job.started', 'job.stage', 'job.finished',
           'operation.started', 'operation.completed', 'operation.failed',
-          'operation.cancelled', 'provider.response'}
+          'operation.cancelled', 'provider.response', 'provider.retry'}
 ENUMS = {
     'category': {'nim', 'ocr', 'mfds', 'pdf'},
     'operation': {'chat', 'tools', 'http', 'index', 'search', 'context', 'sections', 'annotate', 'unknown'},
@@ -34,7 +34,7 @@ ROUTES = {'/', '/vendor/pdfjs', '/api/config', '/api/cases', '/api/cases/{identi
           '/api/jobs/{identifier}/cancel', '/api/jobs/{identifier}/events',
           '/api/jobs/{identifier}/annotated.pdf'}
 NUMBERS = {'duration_ms', 'wait_ms', 'elapsed_seconds', 'timeout_seconds', 'status',
-           'prompt_tokens', 'completion_tokens', 'total_tokens'}
+           'prompt_tokens', 'completion_tokens', 'total_tokens', 'attempt', 'max_attempts', 'delay_seconds'}
 
 
 def safe_fields(fields):

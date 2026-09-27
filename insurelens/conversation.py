@@ -9,7 +9,7 @@ MAX_QUOTE_CHARS = 1200
 
 def model_context(turns):
     selected, size = [], 0
-    for turn in reversed([t for t in turns if t['state'] == 'completed'][-MAX_TURNS:]):
+    for turn in reversed([t for t in turns if t['state'] == 'completed' and not (t.get('result') or {}).get('requiresDrugSelection')][-MAX_TURNS:]):
         result = turn.get('result') or {}
         sources = []
         for hit in result.get('quotes', []):

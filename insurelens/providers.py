@@ -58,6 +58,11 @@ async def _send_json_request(client, method, url, service='PROVIDER', **kwargs):
 
 
 class Nvidia:
+    TIMEOUT_SECONDS = 300
+    RETRY_DELAY_SECONDS = 1
+    MAX_ATTEMPTS = 2
+    RETRYABLE_ERRORS = {'NIM_TIMEOUT', 'NIM_UNAVAILABLE', 'NIM_SERVICE_UNAVAILABLE'}
+
     def __init__(self, env=os.environ, client=None, transport=None):
         self.key = env.get('NVIDIA_API_KEY', '')
         self.base = env.get('NIM_BASE_URL') or 'https://integrate.api.nvidia.com/v1'
@@ -85,8 +90,8 @@ class Nvidia:
                 base_url=self.microservices_base or inference,
                 inference_base_url=inference,
                 default_headers={'Authorization': f'Bearer {self.key}'},
-                timeout=60, max_retries=0,
-                http_client=httpx.AsyncClient(transport=self._transport, timeout=60, follow_redirects=False),
+                timeout=self.TIMEOUT_SECONDS, max_retries=0,  # Retries are bounded by _completion below.
+                http_client=httpx.AsyncClient(transport=self._transport, timeout=self.TIMEOUT_SECONDS, follow_redirects=False),
             )
         return self._sdk
 
@@ -99,12 +104,23 @@ class Nvidia:
     def generation_options(model):
         return {'chat_template_kwargs': {'enable_thinking': False}} if re.match(r'^nvidia/nemotron-(?:3(?:[.-]|$)|nano-3)', model) else {}
 
-    async def _completion(self, messages, model, *, tools=None, response_schema=None, timeout=60):
-        async with measured('nim', 'tools' if tools is not None else 'chat', model=model,
-                            timeout_seconds=timeout, response_mode='tools' if tools is not None else ('schema' if response_schema is not None else 'json')):
-            return await self._send_completion(messages, model, tools=tools, response_schema=response_schema, timeout=timeout)
+    async def _completion(self, messages, model, *, tools=None, response_schema=None, timeout=TIMEOUT_SECONDS):
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            try:
+                async with measured('nim', 'tools' if tools is not None else 'chat', model=model,
+                                    timeout_seconds=timeout, attempt=attempt, max_attempts=self.MAX_ATTEMPTS,
+                                    response_mode='tools' if tools is not None else ('schema' if response_schema is not None else 'json')):
+                    return await self._send_completion(messages, model, tools=tools, response_schema=response_schema, timeout=timeout)
+            except AppError as error:
+                if attempt == self.MAX_ATTEMPTS or error.code not in self.RETRYABLE_ERRORS:
+                    raise
+                record('provider.retry', category='nim', code=error.code, attempt=attempt + 1,
+                       max_attempts=self.MAX_ATTEMPTS, delay_seconds=self.RETRY_DELAY_SECONDS)
+                # No tools have been executed for a failed completion. Retry only
+                # that immutable inference request, never the whole investigation.
+                await asyncio.sleep(self.RETRY_DELAY_SECONDS)
 
-    async def _send_completion(self, messages, model, *, tools=None, response_schema=None, timeout=60):
+    async def _send_completion(self, messages, model, *, tools=None, response_schema=None, timeout=TIMEOUT_SECONDS):
         ensure(self.enabled, 'NVIDIA_KEY_REQUIRED', 409)
         kwargs = dict(model=model, messages=messages, temperature=0,
                       max_tokens=1500 if tools is not None else 1000, stream=False)
@@ -123,7 +139,7 @@ class Nvidia:
             kwargs['tool_choice'] = 'auto'
         try:
             async with asyncio.timeout(timeout):
-                value = await self._client().chat.completions.create(**kwargs, extra_body=extra)
+                value = await self._client().chat.completions.create(**kwargs, extra_body=extra, timeout=timeout)
             result = value.model_dump(mode='json') if hasattr(value, 'model_dump') else value
             ensure(isinstance(result, dict), 'NIM_INVALID_RESPONSE', 502)
             ensure(len(json.dumps(result, ensure_ascii=False)) < LIMIT, 'PROVIDER_RESPONSE_LIMIT', 502)
@@ -145,7 +161,7 @@ class Nvidia:
         except (ValueError, TypeError, AttributeError):
             raise AppError('NIM_INVALID_RESPONSE', 502) from None
 
-    async def chat(self, messages, model=None, *, response_schema=None, timeout=60):
+    async def chat(self, messages, model=None, *, response_schema=None, timeout=TIMEOUT_SECONDS):
         result = await self._completion(messages, model or self.model, response_schema=response_schema, timeout=timeout)
         ensure(result['finish_reason'] == 'stop', 'NIM_INCOMPLETE_RESPONSE', 502)
         content = result['message'].get('content')
@@ -214,48 +230,86 @@ class Nvidia:
 
 
 class Drugs:
+    BASE = 'https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService08/'
+
     def __init__(self, env=os.environ, transport=None):
-        self.key = env.get('MFDS_API_KEY', '')
-        self._http = httpx.AsyncClient(transport=transport, timeout=60, follow_redirects=False)
+        from urllib.parse import unquote
+        self.key = unquote((env.get('MFDS_API_KEY') or '').strip())
+        self._http = httpx.AsyncClient(transport=transport, timeout=30, follow_redirects=False)
 
     @property
     def enabled(self):
         return bool(self.key)
 
-    async def lookup(self, name):
+    async def _items(self, operation, **params):
         ensure(self.enabled, 'MFDS_KEY_REQUIRED', 409)
-        ensure(isinstance(name, str) and 2 <= len(name) <= 120, 'INVALID_DRUG_NAME')
-        raw = await _json_request(self._http, 'GET', 'https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService08/getDrugPrdtPrmsnInq08', params={'serviceKey': self.key, 'item_name': name, 'pageNo': '1', 'numOfRows': '30', 'type': 'json'})
+        raw = await _json_request(self._http, 'GET', self.BASE + operation, service='MFDS',
+            params={'serviceKey': self.key, 'pageNo': '1', 'numOfRows': '30', 'type': 'json', **params})
         ensure(isinstance(raw, dict), 'MFDS_REQUEST_FAILED', 502)
         result = raw.get('response', raw)
         ensure(isinstance(result, dict), 'MFDS_REQUEST_FAILED', 502)
         header = result.get('header') or {}
-        ensure(isinstance(header, dict) and str(header.get('resultCode')) in ('00', '0'), 'MFDS_REQUEST_FAILED', 502)
+        ensure(isinstance(header, dict), 'MFDS_REQUEST_FAILED', 502)
+        code = str(header.get('resultCode'))
+        if code in {'20', '30', '31'}:
+            raise AppError('MFDS_AUTH_FAILED', 502)
+        if code in {'22', '23'}:
+            raise AppError('MFDS_RATE_LIMIT', 429)
+        ensure(code in {'00', '0'}, 'MFDS_REQUEST_FAILED', 502)
         body = result.get('body') or {}
         ensure(isinstance(body, dict), 'MFDS_REQUEST_FAILED', 502)
         items = body.get('items') or []
         if isinstance(items, dict):
             items = items.get('item', items)
         if isinstance(items, dict):
-            items = [items] if items.get('ITEM_SEQ') else []
-        ensure(isinstance(items, list), 'MFDS_REQUEST_FAILED', 502)
-        products = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            identifier = str(item.get('ITEM_SEQ', ''))
-            if not re.fullmatch(r'\d{5,20}', identifier) or not isinstance(item.get('ITEM_NAME'), str) or not isinstance(item.get('ITEM_INGR_NAME'), str) or not item['ITEM_INGR_NAME']:
-                continue
-            products.append({'id': identifier, 'name': item['ITEM_NAME'], 'ingredients': item['ITEM_INGR_NAME'],
-                'manufacturer': item.get('ENTP_NAME'), 'permitDate': item.get('ITEM_PERMIT_DATE'), 'cancelDate': item.get('CANCEL_DATE') or None,
-                'url': 'https://nedrug.mfds.go.kr/pbp/CCBBB01/getItemDetail?itemSeq=' + quote(identifier),
-                'retrievedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')})
+            items = [items] if items else []
+        ensure(isinstance(items, list) and len(items) <= 30 and all(isinstance(x, dict) for x in items), 'MFDS_REQUEST_FAILED', 502)
         try:
             total = int(body.get('totalCount') or 0)
-        except (TypeError, ValueError):
-            total = 0
-        return {'products': products, 'total': total, 'requiresSelection': True,
+        except (ValueError, TypeError):
+            raise AppError('MFDS_REQUEST_FAILED', 502) from None
+        return items, total
+
+    @staticmethod
+    def _product(item):
+        identifier = str(item.get('ITEM_SEQ', ''))
+        ensure(bool(re.fullmatch(r'\d{5,20}', identifier)) and isinstance(item.get('ITEM_NAME'), str), 'MFDS_INVALID_PRODUCT', 502)
+        ingredient = item.get('MAIN_ITEM_INGR') or item.get('ITEM_INGR_NAME') or ''
+        ensure(isinstance(ingredient, str), 'MFDS_INVALID_PRODUCT', 502)
+        return {'id': identifier, 'name': item['ITEM_NAME'], 'ingredients': ingredient,
+                'manufacturer': item.get('ENTP_NAME'), 'permitDate': item.get('ITEM_PERMIT_DATE'),
+                'cancelDate': item.get('CANCEL_DATE') or None,
+                'url': 'https://nedrug.mfds.go.kr/pbp/CCBBB01/getItemDetail?itemSeq=' + identifier,
+                'retrievedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}
+
+    async def lookup(self, name):
+        ensure(isinstance(name, str) and 2 <= len(name) <= 120, 'INVALID_DRUG_NAME')
+        items, total = await self._items('getDrugPrdtPrmsnInq08', item_name=name)
+        products = [self._product(item) for item in items]
+        return {'products': products, 'total': total, 'truncated': total > len(products), 'requiresSelection': True,
                 'source': 'https://www.data.go.kr/data/15095677/openapi.do'}
+
+    async def ingredients(self, identifier):
+        ensure(isinstance(identifier, str) and bool(re.fullmatch(r'\d{5,20}', identifier)), 'INVALID_DRUG_ID')
+        items, total = await self._items('getDrugPrdtMcpnDtlInq08', Item_seq=identifier)
+        ensure(total == len(items) and all(str(x.get('ITEM_SEQ')) == identifier for x in items), 'MFDS_PRODUCT_MISMATCH', 502)
+        return items
+
+    async def detail(self, identifier):
+        ensure(isinstance(identifier, str) and bool(re.fullmatch(r'\d{5,20}', identifier)), 'INVALID_DRUG_ID')
+        items, total = await self._items('getDrugPrdtPrmsnDtlInq08', item_seq=identifier)
+        ensure(total == 1 and len(items) == 1 and str(items[0].get('ITEM_SEQ')) == identifier, 'MFDS_PRODUCT_MISMATCH', 502)
+        item = items[0]
+        documents = {k: item.get(k) or '' for k in ('MAIN_ITEM_INGR', 'ITEM_INGR_NAME', 'EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA')}
+        ensure(all(isinstance(x, str) and len(x) <= 1_000_000 for x in documents.values()), 'MFDS_DOCUMENT_LIMIT', 502)
+        if not documents['MAIN_ITEM_INGR'] and not documents['ITEM_INGR_NAME']:
+            for i, row in enumerate(await self.ingredients(identifier)):
+                value = row.get('MTRAL_NM')
+                ensure(isinstance(value, str), 'MFDS_INVALID_PRODUCT', 502)
+                documents[f'MTRAL_NM:{i}'] = value
+        return {'product': self._product(item), 'documents': documents,
+                'changeDate': item.get('CHANGE_DATE'), 'status': item.get('CANCEL_NAME'),
+                'retrievedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}
 
     async def close(self):
         await self._http.aclose()

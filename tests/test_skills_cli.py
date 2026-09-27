@@ -40,13 +40,19 @@ class SkillsCliTests(unittest.TestCase):
         self.assertEqual(self.cli("unknown", {}, ok=False), {"error":"UNKNOWN_SKILL"})
         self.assertEqual(self.cli(SKILLS[2], {"op":"index", "pdf":"relative.pdf", "index":"/tmp/test.index"}, ok=False), {"error":"ABSOLUTE_PATH_REQUIRED"})
 
-    def test_curated_reference_quotes_unchanged_and_live_is_explicit(self):
-        from insurelens.agents.drug_references import resolve_drug_references
-        result = self.cli(SKILLS[1], {"op":"from-text", "text":"조플루자"})
-        self.assertEqual(result, resolve_drug_references(query="조플루자"))
-        self.assertTrue(result["references"])
-        self.assertTrue(all(ref["source"]["url"].startswith("https://") for ref in result["references"]))
+    def test_live_lookup_and_detail_require_key_without_catalog_fallback(self):
+        self.assertEqual(self.cli(SKILLS[1], {"op":"from-text", "text":"조플루자"}, ok=False), {"error":"INVALID_REQUEST"})
         self.assertEqual(self.cli(SKILLS[1], {"op":"lookup", "name":"타미플루"}, ok=False), {"error":"MFDS_KEY_REQUIRED"})
+        self.assertEqual(self.cli(SKILLS[1], {"op":"detail", "itemId":"202012345"}, ok=False), {"error":"MFDS_KEY_REQUIRED"})
+        from tests.mfds_fixture import provider
+        async def check():
+            drugs=provider()
+            try:
+                result=await execute(SKILLS[1], {"op":"detail", "itemId":"202012345"}, drugs=drugs)
+                self.assertEqual(result['references'][0]['source']['type'],'mfds_label')
+                self.assertIn('발록사비르',str(result['references']))
+            finally:await drugs.close()
+        asyncio.run(check())
 
     def test_pdf_roundtrip_text_preserved_and_tampering_rejected(self):
         with TemporaryDirectory() as folder:

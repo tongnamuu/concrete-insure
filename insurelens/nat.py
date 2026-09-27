@@ -48,7 +48,7 @@ from pydantic import Field
 
 
 class InsureLensConfig(FunctionBaseConfig, name="insurelens_python"):
-    timeout_seconds: float = Field(default=600, ge=1, le=900)
+    timeout_seconds: float = Field(default=1200, ge=1, le=3600)
 
 
 @register_function(config_type=InsureLensConfig)

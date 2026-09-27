@@ -33,13 +33,20 @@ def arguments(call, keys):
         raise AppError('INVALID_TOOL_ARGUMENTS', 502) from error
 
 
-async def run_investigation(*, document, request, products=None, nim=None, emit=lambda event, data: None, operation=pdf_operation, conversation=None):
+async def run_investigation(*, document, request, products=None, nim=None, emit=lambda event, data: None, operation=pdf_operation, conversation=None, drugs=None):
     ensure(getattr(nim, 'enabled', False), 'NVIDIA_KEY_REQUIRED', 409)
     ensure(request.get('cloudConsent') is True, 'NIM_CONSENT_REQUIRED', 409)
     facts = await model_progress(understand_input_with_model(request, nim, conversation=conversation),
                                  emit=emit, stage='input', label='검색 1단계')
-    drug = identify_drugs(products)
-    reference = resolve_drug_references(query=facts['query'], description=facts['description'], confirmed_terms=facts['terms'] + request.get('confirmedTerms', []), products=products)
+    if products or facts['drugNames']:
+        emit('stage_started', {'stage': 'drug_reference', 'message': '검색 2단계'})
+    identify_drugs(products)  # Validate server-owned selected records before calling MFDS.
+    reference = await resolve_drug_references(products=products, drug_names=facts['drugNames'], drugs=drugs)
+    if reference['requiresSelection']:
+        return {'mode': 'nim-react', 'requiresDrugSelection': True, 'products': reference['products'],
+                'missingNames': reference['missingNames'], 'drugNames': facts['drugNames'], 'truncated': reference.get('truncated', False),
+                'quotes': [], 'references': [], 'mappings': [], 'terms': facts['terms']}
+    drug = identify_drugs(reference['products'])
     terms = unique(reference['specificTerms'] + facts['terms'] + drug['terms'] + reference['contextTerms'])[:50]
     ensure(terms, 'NO_EXPLICIT_TERMS')
     gloss = []

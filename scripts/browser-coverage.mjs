@@ -12,14 +12,19 @@ p=d.new_page()
 lines=['성분명 안내: 발록사비르(baloxavir)','신규 허가 또는 허가 취소시 변경될 수 있습니다.','제3조 (보험금을 지급하지 않는 사유)','보통약관 제8조 제1항을 따릅니다.','제4조 (보험금의 청구)','처방전과 청구서를 제출합니다.','6-37 다른 질병 특별약관','제1조 (보험금의 지급사유)','다른 질병은 다른 기준으로 지급합니다.']
 for i,t in enumerate(lines):p.insert_text((40,60+45*i),t,fontname='korea')
 d.save(sys.argv[1])`,pdf]);
-const server=await startPythonTestServer(path.join(temp,'test-data'));const base=server.base;
+const server=await startPythonTestServer(path.join(temp,'test-data'),'tests.browser_server:create_drug_test_app');const base=server.base;
 const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})}).catch(async error=>{await server.close();await rm(temp,{recursive:true,force:true});throw error;});
 const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
  await page.goto(base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('test-policy.pdf',{timeout:30000});
  await page.locator('#query').fill('조플루자를 처방받았습니다.');await page.locator('#send').click();await acceptConsent(page);
+ await expect(page.locator('.drug-selection')).toContainText('함량·제형',{timeout:60000});
+ await page.reload();await expect(page.locator('.drug-selection')).toBeVisible();
+ await page.getByRole('button',{name:'제품 확인 후 다시 검색'}).click();
+ await page.locator('#drugResults input[type=checkbox]').first().check();
+ await page.locator('#send').click();await expect(page.locator('#consentDialog')).toBeVisible();await acceptConsent(page);
  await expect(page.locator('.coverage-status')).toHaveText('약관에 관련 보장 항목이 명시되어 있습니다.',{timeout:60000});
- await expect(page.locator('.coverage-link')).toContainText('성분 근거를 통한 간접 연결');await expect(page.locator('.coverage-link')).toContainText('조플루자 → 발록사비르');await expect(page.locator('.coverage-caution')).toContainText('실제 보장은');
+ await expect(page.locator('.coverage-link')).toContainText('성분 근거를 통한 간접 연결');await expect(page.locator('.coverage-link')).toContainText('조플루자정20밀리그램 → 발록사비르');await expect(page.locator('.coverage-caution')).toContainText('실제 보장은');
  await expect(page.locator('.coverage-panel')).not.toContainText('다른 질병');
  const clauses=page.locator('.coverage-panel .clause-group');assert.equal(await clauses.count(),4);
  const blocks=await page.locator('.quote-card blockquote').allTextContents();assert(blocks.length>0);assert(blocks.every(t=>/[^\s\p{C}]/u.test(t)));
@@ -29,5 +34,5 @@ try{
  // A compact screenshot of the decision scope and source connection; no personal data.
  await page.locator('.clause-group[data-kind="payment"] summary').click();await definition.locator('summary').click();if(process.env.SCREENSHOT)await page.locator('.coverage-panel').screenshot({path:process.env.SCREENSHOT});
  await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
- console.log(JSON.stringify({ok:true,orchestrator:'nat',inference:'explicit-test-fixture',policyBenefit:true,ingredientLink:true,allFourClauses:true,noBlankCards:true,nextRiderExcluded:true,highlight:true,download:true,clearAndReload:true,browserErrors:errors}));
+ console.log(JSON.stringify({ok:true,orchestrator:'nat',inference:'explicit-test-fixture',policyBenefit:true,ingredientLink:true,mfds:'explicit-http-fixture',productSelection:true,freshConsent:true,allFourClauses:true,noBlankCards:true,nextRiderExcluded:true,highlight:true,download:true,clearAndReload:true,browserErrors:errors}));
 }catch(e){console.error(JSON.stringify({error:e.message,uiError:await page.locator('#error').textContent()}));process.exitCode=1;}finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

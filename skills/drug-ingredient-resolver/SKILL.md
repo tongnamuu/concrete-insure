@@ -1,15 +1,16 @@
 ---
 name: drug-ingredient-resolver
-description: Resolve medicine names to sourced ingredient references or explicitly query official MFDS product candidates. Use for evidence-backed brand and ingredient lookup, not diagnosis inference or insurance payment decisions.
+description: Query official MFDS product candidates and retrieve source-bound ingredient and label references for an explicitly selected product. Never infer diagnosis or insurance eligibility.
 ---
 
-# Sourced drug ingredients
+# MFDS medicine evidence
 
-Use `insurelens-skill drug-ingredient-resolver` with one JSON stdin object after installing the project Python runtime. Alternatively use `.venv/bin/python -m insurelens.skills_cli drug-ingredient-resolver` from the project.
+Run `insurelens-skill drug-ingredient-resolver` with one JSON stdin object. The project `.env` must contain `MFDS_API_KEY`, issued after applying for [MFDS Drug Product Approval Information](https://www.data.go.kr/data/15095677/openapi.do). There is no local product catalog or no-key substitute.
 
-- Curated local references: `{"op":"from-text","text":"조플루자를 처방받았습니다."}`. Returns the existing verified catalog entries with unchanged `source` and `facts[].quote`, plus literal search terms. This mode never performs a live lookup. Empty references mean no catalog match, not absence of a product or benefit.
-- Explicit live MFDS search: `{"op":"lookup","name":"타미플루"}`. Requires `MFDS_API_KEY` in the project `.env`. Returns official product candidates, source URL, retrieval time, and `requiresSelection:true`. Keep manufacturer, strength, and formulation ambiguity visible and let the user select the actual product.
+- Product lookup: `{"op":"lookup","name":"제품명"}`. Sends the name to MFDS and returns candidates, total, truncated and requiresSelection. Ask the user to select the actual product, including strength and formulation. A single candidate still requires confirmation.
+- Selected product detail: `{"op":"detail","itemId":"202012345"}`. Use a confirmed item ID from lookup, never an invented ID. Returns the product and references with original quotes, field/paragraph identifiers, document hashes, official URL, retrieval time and document change date. The numeric value above is a schema example, not a product recommendation.
+- `from-text` has been removed. The web input agent selects only literal drug names, then calls these shared Python tools. The web runtime does not spawn the CLI.
 
-Present product/ingredient facts separately from policy quotations. Preserve source quotations and URLs; do not invent mappings, strip prodrug suffixes to fabricate a match, treat a manufacturer's reference as historical regulatory approval, or infer the user's illness. An ingredient match is not a conclusion about enrollment, benefit applicability, or payment.
+Use `DrugPrdtPrmsnInfoService08`: list via `getDrugPrdtPrmsnInq08`, detail via `getDrugPrdtPrmsnDtlInq08`, missing ingredient fields via `getDrugPrdtMcpnDtlInq08`. Keep API keys out of prompts, output and logs. Failed authentication, missing records, malformed documents and timeouts must remain explicit failures.
 
-The CLI delegates to the existing catalog resolver/validator and MFDS provider. The web runtime calls shared Python functions directly, not this CLI subprocess. Errors are JSON codes with nonzero exit status; never print API keys.
+Preserve source quotes, ingredient salts and formulation qualifiers. An explicit supported active-metabolite sentence may supply a literal search term; never infer a relationship by stripping suffixes. Keep treatment and prophylaxis evidence distinct. Product facts are not patient facts. Current records do not establish historical approval or insurance coverage. Selected text must remain a literal portion of official fields or parsed document paragraphs. Do not fabricate evidence when a relation cannot be established.

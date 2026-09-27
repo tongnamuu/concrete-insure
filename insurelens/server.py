@@ -332,6 +332,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
     @app.post("/api/cases/{identifier}/drugs")
     async def lookup_drug(identifier: UUID, request: Request, body: DrugLookupRequest):
         case = case_for(identifier, request)
+        ensure(drugs.enabled, "MFDS_KEY_REQUIRED", 409)
         result = await drugs.lookup(body.name)
         # Read again after awaiting the provider to avoid losing concurrent results.
         products = case_for(identifier, request)["products"]
@@ -362,7 +363,13 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
             store.add_turn(body.conversationId, job_id, body.model_dump())
 
         async def run(emit):
-            return await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, emit=emit, operation=pdf, **({'conversation': context} if context is not None else {}))
+            result = await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, drugs=drugs, emit=emit, operation=pdf, **({'conversation': context} if context is not None else {}))
+            if result.get('requiresDrugSelection'):
+                candidates = case_for(identifier, request)['products']
+                candidates.update({p['id']: p for p in result['products']})
+                ensure(len(candidates) <= 300, 'DRUG_RESULT_LIMIT', 429)
+                store.set_products(case['id'], candidates)
+            return result
 
         app.state.queue.add(job_id, run)
         return {"jobId": job_id}

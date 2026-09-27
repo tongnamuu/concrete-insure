@@ -21,3 +21,8 @@ def create_slow_test_app():
 def create_conversation_test_app():
     from tests.nim_fixture import ConversationNim
     return create_app(root=os.environ['DATA_DIR'], nim=ConversationNim(), drugs=SimpleNamespace(enabled=False))
+
+
+def create_drug_test_app():
+    from tests.mfds_fixture import DrugNim, provider
+    return create_app(root=os.environ['DATA_DIR'], nim=DrugNim(), drugs=provider())

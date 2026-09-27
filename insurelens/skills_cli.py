@@ -34,9 +34,9 @@ class FilePrescription(Strict):
     cloudConsent: bool = False
 
 
-class ReferenceRequest(Strict):
-    op: Literal["from-text"]
-    text: str = Field(min_length=1, max_length=4000)
+class DetailRequest(Strict):
+    op: Literal["detail"]
+    itemId: str = Field(pattern=r"^\d{5,20}$")
 
 
 class LookupRequest(Strict):
@@ -108,7 +108,7 @@ class PdfAnnotate(PdfIndex):
 
 SCHEMAS = {
     "ocr-prescription": TypeAdapter(Annotated[TextPrescription | FilePrescription, Field(discriminator="op")]),
-    "drug-ingredient-resolver": TypeAdapter(Annotated[ReferenceRequest | LookupRequest, Field(discriminator="op")]),
+    "drug-ingredient-resolver": TypeAdapter(Annotated[DetailRequest | LookupRequest, Field(discriminator="op")]),
     "pdf-iso32000-annotator": TypeAdapter(Annotated[PdfIndex | PdfSearch | PdfContext | PdfAnnotate, Field(discriminator="op")]),
 }
 
@@ -159,16 +159,17 @@ async def execute(skill, value, *, nim=None, drugs=None, operation=pdf_operation
     if skill == "ocr-prescription":
         return await _prescription(request, nim=nim, operation=operation)
     if skill == "drug-ingredient-resolver":
-        if request.op == "from-text":
-            from .agents.drug_references import resolve_drug_references, verify_drug_references
-            result = resolve_drug_references(query=request.text)
-            verify_drug_references(result["references"])
-            return result
         owns_provider = drugs is None
         if drugs is None:
             from .providers import Drugs
             drugs = Drugs()
         try:
+            if request.op == 'detail':
+                from .agents.drug_references import reference_from_detail, verify_drug_references
+                detail = await drugs.detail(request.itemId)
+                references = [reference_from_detail(detail)]
+                verify_drug_references(references)
+                return {'product': detail['product'], 'references': references}
             return await drugs.lookup(request.name)
         finally:
             if owns_provider:
