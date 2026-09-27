@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from insurelens.core import ensure, AppError
 from insurelens.pdf import pdf_operation
+from insurelens.progress import model_progress
 from insurelens.agents.input import understand_input_with_model
 from insurelens.agents.drug import identify_drugs
 from insurelens.agents.drug_references import resolve_drug_references
@@ -35,15 +36,15 @@ def arguments(call, keys):
 async def run_investigation(*, document, request, products=None, nim=None, emit=lambda event, data: None, operation=pdf_operation):
     ensure(getattr(nim, 'enabled', False), 'NVIDIA_KEY_REQUIRED', 409)
     ensure(request.get('cloudConsent') is True, 'NIM_CONSENT_REQUIRED', 409)
-    emit('stage_started', {'stage': 'input', 'message': '입력 자료의 명시된 정보를 확인합니다.'})
-    facts = await understand_input_with_model(request, nim)
+    facts = await model_progress(understand_input_with_model(request, nim),
+                                 emit=emit, stage='input', label='입력 확인')
     drug = identify_drugs(products)
     reference = resolve_drug_references(query=facts['query'], description=facts['description'], confirmed_terms=request.get('confirmedTerms', []), products=products)
     terms = unique(reference['specificTerms'] + facts['terms'] + drug['terms'] + reference['contextTerms'])[:50]
     ensure(terms, 'NO_EXPLICIT_TERMS')
     gloss = []
     if request.get('translation'):
-        gloss = await nim.gloss(terms.copy())
+        gloss = await model_progress(nim.gloss(terms.copy()), emit=emit, stage='translation', label='번역 확인')
         ensure(len(gloss) == len(terms) and all(x['id'] == i and x['original'] == terms[i] for i, x in enumerate(gloss)), 'TRANSLATION_BOUNDARY')
     emit('stage_completed', {'stage': 'input', 'message': '원문에서 검색할 명시 정보를 확인했습니다.'})
     hits = {}
@@ -95,7 +96,8 @@ async def run_investigation(*, document, request, products=None, nim=None, emit=
     repeats, call_ids, finished = set(), set(), False
     for _ in range(8):
         await asyncio.sleep(0)
-        response = await nim.complete(messages, TOOLS)
+        response = await model_progress(nim.complete(messages, TOOLS),
+                                        emit=emit, stage='planning', label=f'검색 단계 {_ + 1} 확인')
         message = response.get('message', {})
         ensure(message.get('role') == 'assistant', 'NIM_INVALID_RESPONSE', 502)
         if response.get('finish_reason') == 'stop':

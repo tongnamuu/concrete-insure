@@ -17,7 +17,7 @@ class ScriptedNim:
         self.fail_code = fail_code
         self.calls = []
 
-    async def chat(self, messages, model=None):
+    async def chat(self, messages, model=None, **kwargs):
         self.calls.append("chat")
         if self.fail_code:
             raise AppError(self.fail_code, 504)

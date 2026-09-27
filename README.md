@@ -66,6 +66,7 @@ uv run --extra dev pytest -q
 npm run test:browser
 npm run test:browser:coverage
 npm run test:browser:consent
+npm run test:browser:progress
 npx skills@1.7.0 add . --list
 # SkillSpector를 별도 설치한 경우:
 sh scripts/scan-skills.sh
@@ -76,6 +77,7 @@ sh scripts/scan-skills.sh
 ## 지원 범위
 
 - 약관: 20MiB·1000쪽·200만 문자. 원문을 보장하기 위해 텍스트 레이어 없는 약관은 거절합니다. 처방 자료는 8MiB·8쪽, 이미지 2500만 픽셀까지입니다.
+- 첫 검색어 추출은 명시적 JSON Schema로 요청하며 최대 25초입니다. 이후 NIM 호출은 각각 최대 60초입니다. 모델 응답 대기는 5초마다 SSE로 현재 단계와 경과 시간을 보내며, 취소하면 해당 호출도 취소됩니다. 시간 초과 시 자동 재시도나 로컬 대체 결과를 만들지 않습니다.
 - PDF 작업은 기본 120초이며 취소 시 프로세스를 종료합니다. 긴 요청은 작업 ID를 반환하고 SSE로 완료를 알립니다.
 - `.local-data`에 기존과 호환되는 SQLite·원본·인덱스를 보관합니다. 재시작하면 완료된 기록은 유지하고 중단된 작업은 `SERVER_RESTARTED`로 표시합니다.
 - 로컬 단일 사용자 데모입니다. 서비스 배포용 계정 인증·암호화·보관 기한·분산 큐는 별도입니다.

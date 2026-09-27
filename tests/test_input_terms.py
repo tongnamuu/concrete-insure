@@ -14,12 +14,12 @@ def test_disease_code_and_confirmed_facts_preserved():
 async def test_model_terms_must_be_literal_and_description_remains_unmodified():
     class Nim:
         enabled=True
-        async def chat(self,messages):return '{"terms":["당뇨"]}'
+        async def chat(self,messages,**kwargs):return '{"terms":["당뇨"]}'
     request={'description':'당뇨에 관한 약관 찾아줘','cloudConsent':True}
     result=await understand_input_with_model(request,Nim())
     assert result['terms']==['당뇨'] and result['description']==request['description']
     class Bad(Nim):
-        async def chat(self,messages):return '{"terms":["독감"]}'
+        async def chat(self,messages,**kwargs):return '{"terms":["독감"]}'
     with pytest.raises(AppError,match='UNGROUNDED_TERM'):await understand_input_with_model({'description':'조플루자를 처방받았습니다.','cloudConsent':True},Bad())
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_raw_description_and_exact_confirmed_terms_reach_model_unchanged()
     confirmed=['처방','성분 에이','J10.1']
     class Nim:
         enabled=True
-        async def chat(self,messages):
+        async def chat(self,messages,**kwargs):
             import json
             data=json.loads(messages[-1]['content'])
             assert data['description']==description and data['confirmedTerms']==confirmed
@@ -54,25 +54,25 @@ async def test_prescription_no_consent_and_ocr_spelling_are_preserved():
     from insurelens.agents.prescription import prescription_candidates
     class MustNotCall:
         enabled=True
-        async def chat(self,messages):pytest.fail('no consent')
+        async def chat(self,messages,**kwargs):pytest.fail('no consent')
     text='환자: 테스트이름\n제품명: 제품에이75mg\n성분명: 오셑타미비르\n질병코드: J10.1'
     assert await prescription_candidates(text,nim=MustNotCall())==['제품에이75mg','오셑타미비르','J10.1']
     class Ungrounded:
         enabled=True
-        async def chat(self,messages):return '{"terms":["독감"]}'
+        async def chat(self,messages,**kwargs):return '{"terms":["독감"]}'
     with pytest.raises(AppError,match='UNGROUNDED_TERM'):await prescription_candidates('제품명: 타미플루',nim=Ungrounded(),consent=True)
 
 @pytest.mark.asyncio
 async def test_runtime_input_understanding_never_substitutes_literal_extraction():
     class NoCalls:
         enabled=True
-        async def chat(self,messages):pytest.fail('missing consent')
+        async def chat(self,messages,**kwargs):pytest.fail('missing consent')
     with pytest.raises(AppError,match='NVIDIA_KEY_REQUIRED'):
         await understand_input_with_model({'query':'독감','cloudConsent':True},None)
     with pytest.raises(AppError,match='NIM_CONSENT_REQUIRED'):
         await understand_input_with_model({'query':'독감'},NoCalls())
     class Failure:
         enabled=True
-        async def chat(self,messages):raise AppError('NIM_TIMEOUT')
+        async def chat(self,messages,**kwargs):raise AppError('NIM_TIMEOUT')
     with pytest.raises(AppError,match='NIM_TIMEOUT'):
         await understand_input_with_model({'query':'독감','cloudConsent':True},Failure())

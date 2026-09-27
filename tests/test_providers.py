@@ -192,3 +192,54 @@ async def test_sdk_redirect_does_not_forward_credentials():
         assert len(requests) == 1
     finally:
         await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_input_uses_explicit_schema_and_preserves_source_validation():
+    from insurelens.agents.input import understand_input_with_model, TERMS_SCHEMA
+    bodies = []
+    response = {'terms': ['조플루자']}
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=completion(json.dumps(response, ensure_ascii=False)))
+    provider = Nvidia(env=ENV, transport=httpx.MockTransport(handler))
+    try:
+        request = {'description': '조플루자를 처방받았어요', 'cloudConsent': True}
+        result = await understand_input_with_model(request, provider)
+        assert result['terms'] == ['조플루자']
+        assert result['description'] == request['description']
+        assert bodies[0]['response_format'] == {'type': 'json_schema', 'json_schema': {'name': 'structured_response', 'strict': True, 'schema': TERMS_SCHEMA}}
+        assert bodies[0]['chat_template_kwargs']['enable_thinking'] is False
+        # Even a provider ignoring the schema cannot invent a diagnosis.
+        response['terms'] = ['독감']
+        with pytest.raises(AppError, match='UNGROUNDED_TERM'):
+            await understand_input_with_model(request, provider)
+        response['terms'] = ['조플루자']
+        response['extra'] = 'unexpected'
+        with pytest.raises(AppError):
+            await understand_input_with_model(request, provider)
+    finally:
+        await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_input_deadline_cancels_sdk_without_retry_or_local_search(monkeypatch):
+    from insurelens.agents import input as input_agent
+    assert input_agent.INPUT_TIMEOUT_SECONDS == 25
+    monkeypatch.setattr(input_agent, 'INPUT_TIMEOUT_SECONDS', .02)
+    cancelled = asyncio.Event()
+    count = 0
+    async def handler(request):
+        nonlocal count
+        count += 1
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+    provider = Nvidia(env=ENV, transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(AppError, match='NIM_TIMEOUT'):
+            await input_agent.understand_input_with_model({'query': '조플루자', 'cloudConsent': True}, provider)
+        assert count == 1 and cancelled.is_set()
+    finally:
+        await provider.close()

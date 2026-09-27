@@ -19,7 +19,7 @@ STOP={'finish_reason':'stop','message':{'role':'assistant','content':'보험금�
 class Nim:
     enabled=True
     def __init__(self,responses):self.responses=iter(responses);self.messages=[]
-    async def chat(self,messages,model=None):return '{"terms":["독감"]}'
+    async def chat(self,messages,model=None,**kwargs):return '{"terms":["독감"]}'
     async def complete(self,messages,tools):self.messages.append(list(messages));return next(self.responses)
 
 async def run(nim=None,request=None,op=operation):
@@ -55,7 +55,7 @@ async def test_empty_source_is_unresolved_not_coverage_denial():
 @pytest.mark.asyncio
 async def test_step_limit_and_translation_boundary():
     class Many(Nim):
-        async def chat(self,messages,model=None):return json.dumps({'terms':['alpha','beta','gamma','delta','epsilon','zeta','theta','iota','kappa']})
+        async def chat(self,messages,model=None,**kwargs):return json.dumps({'terms':['alpha','beta','gamma','delta','epsilon','zeta','theta','iota','kappa']})
     request={**REQUEST,'query':'alpha beta gamma delta epsilon zeta theta iota kappa'}
     plans=[call(args={'ids':[i]},ident=str(i)) for i in range(8)]
     with pytest.raises(AppError,match='AGENT_STEP_LIMIT'):await run(Many(plans),request)
@@ -84,7 +84,7 @@ async def test_provider_and_explicit_consent_required_before_any_work(nim,case_i
 @pytest.mark.parametrize('code',['NIM_TIMEOUT','NIM_AUTH_FAILED','NIM_MODEL_UNAVAILABLE','NIM_INVALID_JSON','UNGROUNDED_TERM'])
 async def test_input_provider_failures_propagate_without_local_execution(code):
     class Failing(Nim):
-        async def chat(self,messages,model=None):raise AppError(code)
+        async def chat(self,messages,model=None,**kwargs):raise AppError(code)
     async def no_pdf(payload):pytest.fail('must not start a local substitute')
     with pytest.raises(AppError,match=code):await run(Failing([]),op=no_pdf)
 
@@ -106,6 +106,6 @@ async def test_react_failure_does_not_repeat_search_or_return_partial_result():
 @pytest.mark.asyncio
 async def test_task_cancellation_propagates_without_search():
     class Cancelled(Nim):
-        async def chat(self,messages,model=None):raise asyncio.CancelledError()
+        async def chat(self,messages,model=None,**kwargs):raise asyncio.CancelledError()
     async def no_pdf(payload):pytest.fail('cancelled task must stop')
     with pytest.raises(asyncio.CancelledError):await run(Cancelled([]),op=no_pdf)

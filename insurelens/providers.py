@@ -92,20 +92,25 @@ class Nvidia:
     def generation_options(model):
         return {'chat_template_kwargs': {'enable_thinking': False}} if re.match(r'^nvidia/nemotron-(?:3(?:[.-]|$)|nano-3)', model) else {}
 
-    async def _completion(self, messages, model, *, tools=None):
+    async def _completion(self, messages, model, *, tools=None, response_schema=None, timeout=60):
         ensure(self.enabled, 'NVIDIA_KEY_REQUIRED', 409)
         kwargs = dict(model=model, messages=messages, temperature=0,
                       max_tokens=1500 if tools is not None else 1000, stream=False)
         extra = self.generation_options(model)
         if tools is None:
-            kwargs['response_format'] = {'type': 'json_object'}
+            if response_schema is not None:
+                # Use the SDK extension for the full NIM JSON Schema contract.
+                extra['response_format'] = {'type': 'json_schema', 'json_schema': {
+                    'name': 'structured_response', 'strict': True, 'schema': response_schema}}
+            else:
+                kwargs['response_format'] = {'type': 'json_object'}
         else:
             # SDK 1.5.0 annotates tools as strings despite the NIM JSON schema.
             # Its documented extra_body extension preserves actual function tools.
             extra = {**extra, 'tools': tools}
             kwargs['tool_choice'] = 'auto'
         try:
-            async with asyncio.timeout(60):
+            async with asyncio.timeout(timeout):
                 value = await self._client().chat.completions.create(**kwargs, extra_body=extra)
             result = value.model_dump(mode='json') if hasattr(value, 'model_dump') else value
             ensure(isinstance(result, dict), 'NIM_INVALID_RESPONSE', 502)
@@ -124,8 +129,8 @@ class Nvidia:
         except (ValueError, TypeError, AttributeError):
             raise AppError('NIM_INVALID_RESPONSE', 502) from None
 
-    async def chat(self, messages, model=None):
-        result = await self._completion(messages, model or self.model)
+    async def chat(self, messages, model=None, *, response_schema=None, timeout=60):
+        result = await self._completion(messages, model or self.model, response_schema=response_schema, timeout=timeout)
         ensure(result['finish_reason'] == 'stop', 'NIM_INCOMPLETE_RESPONSE', 502)
         content = result['message'].get('content')
         ensure(isinstance(content, str) and bool(content.strip()), 'NIM_INVALID_RESPONSE', 502)
