@@ -1,0 +1,49 @@
+# Deployment template for a Linux image with the application at /app.
+# Not automatically activated by insure-lens; validate with installed OpenShell version.
+version: 1
+filesystem_policy:
+  include_workdir: false
+  read_only: [/usr, /lib, /lib64, /etc, /app]
+  read_write: [/tmp, /app/.local-data]
+landlock:
+  compatibility: best_effort
+process:
+  run_as_user: "1000"
+  run_as_group: "1000"
+network_policies:
+  nvidia_chat:
+    endpoints:
+      - host: integrate.api.nvidia.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: POST
+              path: /v1/chat/completions
+    binaries:
+      - path: /app/.venv/bin/python
+  nvidia_ocr:
+    endpoints:
+      - host: ai.api.nvidia.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: POST
+              path: /v1/cv/nvidia/nemotron-ocr-v2
+    binaries:
+      - path: /app/.venv/bin/python
+  mfds:
+    endpoints:
+      - host: apis.data.go.kr
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: GET
+              path: /1471000/DrugPrdtPrmsnInfoService08/getDrugPrdtPrmsnInq08
+    binaries:
+      - path: /app/.venv/bin/python
