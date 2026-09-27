@@ -1,0 +1,27 @@
+{
+  "name": "insure-lens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "setup:pdf": "uv venv .venv && uv pip install --python .venv/bin/python -r requirements-pdf.txt",
+    "skills:list": "npx skills@1.7.0 add . --list",
+    "setup:nat": "uv venv integrations/nat/.venv --python 3.13 && uv pip install --python integrations/nat/.venv/bin/python -e integrations/nat",
+    "test:browser": "node scripts/browser-smoke.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "pdfjs-dist": "^6.3.289",
+    "sharp": "^0.35.4",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

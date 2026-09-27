@@ -1,0 +1,12 @@
+node_modules/
+.venv/
+.env
+.env.*
+!.env.example
+.local-data/
+__pycache__/
+*.pyc
+playwright-report/
+test-results/
+integrations/nat/.venv/
+*.egg-info/

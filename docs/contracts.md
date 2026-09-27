@@ -1,0 +1,66 @@
+# InsureLens contracts v1
+
+Latest requirements: Node.js web/API, no diagnosis inference, no insurance eligibility/claim recommendation, no policy paraphrase or summary. Nemotron output is control data only. Human-readable policy quotes are assembled by application code from PDF source spans. NVIDIA credentials are read only by the runtime from the user-configured .env; never log or package them. Web only; NemoClaw excluded per prior explicit decision. OpenShell optional sandbox integration. No finetuning.
+
+## Shared core
+
+`src/core.js`: AppError(code,status), ensure, querySchema, literalTerms(query,confirmedTerms), groundedTerms(raw,query,confirmedTerms,description), NOTICE. All public request schemas strict. Offset encoding is Unicode code points, not JS UTF-16. Use Array.from(text) for slicing in JS. The request must contain non-whitespace query or description. Description is an unchanged user statement, never OCR evidence or a verified diagnosis. Term grounding validates each input field separately to prevent cross-field fabricated substrings.
+
+Request: `{query:string(0..2000,default:""),description:string(0..4000,default:""),confirmedTerms:string[](<=20,1..120),drugIds:string[](<=5,numeric MFDS IDs),cloudConsent:boolean,translation:boolean}`.
+Prescription images/PDFs are optional. An investigation requires a policy PDF and a non-empty user query or description; it must not require an OCR job, confirmedTerms, or selected products. User-entered facts remain user assertions, not verified diagnoses.
+
+confirmedTerms are explicit user-confirmed OCR terms or explicitly entered facts, never automatically promoted OCR output. Drug IDs must be selected from server-owned MFDS lookup records belonging to this case. Official ingredients may expand only to literal strings contained in the selected official fields; never infer a disease from a medicine.
+
+SourceHit: `{id:'page:start:end',page:1-based,start,end,sourceStart,sourceEnd,quote,matchedText,segments:[{index,start,end,quad:number[8]|null}],documentHash,offsetEncoding:'unicode-code-points'}`. quad is PDF user-space polygon [LL,LR,UR,UL]. Every value derived from original PDF. quote contains exact contiguous text-layer source span. Synthetic newlines mark extracted line boundaries, no normalization. Quote boundaries are explicitly extraction-layer, not original PDF binary byte offsets.
+
+## PDF worker
+
+`src/pdf.js` exports `pdfOperation(payload,{timeout=120000,python,signal}={}) -> Promise<value>`.
+Input operations: index `{op:'index',pdf:absolute,index:absolute}` -> `{hash,pages,characters,textPages}`;
+search `{op:'search',pdf,index,terms:string[],pages?:number[]}` -> `{hits:SourceHit[],truncated:boolean}`;
+text `{op:'text',pdf,index}` -> `{text:string}` for prescription text PDFs;
+render `{op:'render',pdf}` -> `{images:base64 PNG[]}` max8pages;
+annotate `{op:'annotate',pdf,index,hits:SourceHit[],output:absolute}` -> `{count,skipped}`.
+Optional search pages are at most20 unique, valid1-based integer pages. Omission searches all pages; an empty list searches none. Results preserve document order and original geometry.
+Paths are server-owned, never supplied by public clients. Original hash/source/coordinates revalidated before annotation. Actual 230/412-page PDFs supported. No user PDFs in repo.
+
+## Providers
+
+`Nvidia` in providers.js: `.enabled`, `.chat(messages,{model,signal}) -> string`, `.complete(messages,{tools,signal}) -> {finish_reason,message}`; `.ocr(buffer,signal)->{text,regions,requiresConfirmation:true}`; `.gloss(terms,signal)->[{id,original,english}]`. Original immutable; translated gloss never searched or quoted.
+`Drugs.lookup(name)->{products:[{id,name,ingredients,manufacturer,permitDate,cancelDate,url,retrievedAt}],total,requiresSelection:true,source}`.
+
+## Investigation subagents
+
+`src/agent.js`: export `runInvestigation({document:{id,pdf,index},request,products:Product[],nim,onEvent:(event,data)=>void,signal}) -> Promise<Result>`.
+Core Result strict shape `{quotes:SourceHit[],mappings:Product[],references:DrugReference[],terms:string[],notice:string,mode:'nim-react'|'local',truncated:boolean}`. The web adapter may add `warnings:string[]` only for explicitly labelled local recovery from provider/control-protocol errors. No free LLM final answer. Server renders only this result. Fail closed on injected actions or unsupported tools. Model may choose IDs from grounded terms only, not arbitrary search strings. Refuse response length/content_filter/unknown tool/invalid IDs. Step limit, repeated-call limits, cancellation.
+Subagent boundaries: input understanding (verbatim facts only), drug identity (verified official data only), policy retrieval (source hits), source verification/output assembly. ReAct observe-tool-result loop at orchestrator and/or retrieval; deterministic modules are tools. Short event summaries, no hidden chain-of-thought streaming. Local mode without credentials is explicitly deterministic, not claimed as model inference.
+NAT Python plugin in integrations/nat registers the native workflow. The workflow invokes the Node agent harness through a bounded subprocess protocol. src/nat.js adapts progress and cancellation to the web job queue. Native tool selection is implemented by the Node ReAct supervisor, not by NAT’s generic built-in ReAct agent.
+
+## Web API
+
+All APIs same-origin; write requests have X-Local-Request:1. HttpOnly session cookie. GET /api/config -> `{nimEnabled,ocrEnabled,mfdsEnabled,translationEnabled,mode}`. POST /api/cases -> `{id}`. GET /api/cases/:id -> `{id,document:null|{id,name,pages,characters,textPages,hash},jobs:[{id,state}],products:Product[]}`.
+POST /api/cases/:id/documents multipart `file`: async returns202 `{jobId}`. Job completed result `{document:{id,name,pages,characters,textPages,hash}}`. PDF20MiB/1000pages/2mchars.
+GET /api/cases/:id/pdf -> original PDF bytes. POST /api/cases/:id/ocr multipart file plus header X-Cloud-Consent:yes ->202 `{jobId}`; text PDF can work locally without cloud, image/scanned PDF requires consent and configured OCR; result `{text,regions?,candidates:string[],requiresConfirmation:true}`. Max file8MiB, prescriptionPDF8pages.
+POST /api/cases/:id/drugs JSON `{name}` -> lookup response above; records saved server-side. User selects exact product id from results for investigation.
+POST /api/cases/:id/investigations JSON Request ->202 `{jobId}`. GET /api/jobs/:id -> `{id,caseId,state,result,error}`. GET /api/jobs/:id/events SSE, event id monotonic; names `queued`, `stage_started`, `stage_completed`, `completed`, `failed`, `cancelled`. completed.data `{resultUrl:'/api/jobs/:id'}`. Last-Event-ID or `?after=N` replay. Events carry `{stage?,message?,code?,resultUrl?}`. EventSource reconnect + server event storage. Never SSE quotes or private reasoning. On completed fetch job result.
+POST /api/jobs/:id/cancel -> `{ok:true}`. GET /api/jobs/:id/annotated.pdf -> saved standard highlight annotations with original quote as annotation content. DELETE /api/cases/:id ->204 removes case documents/jobs.
+
+UI: 1:1 split, left chat/upload/OCR confirmation/drug candidate selection, right PDF.js with text layer and exact source quad overlays, click quote navigates page. Upload own PDF without fixtures. Render text with textContent only. No diagnoses/eligibility language. Distinguish source quotes, OCR drafts, official product facts. Recover case ID via localStorage and restore the uploaded policy. Do not restore completed investigation results on reload; reconnect only pending jobs. The clear-results action resets visible conversation/results, highlights and download selection, while preserving inputs, files and persisted job records. Delete control. Download annotations. UI uses SourceHit quote unchanged. User question '독감걸렸는데 관련 내용찾아줘' works offline for explicit 독감 surface form, better native LLM selection with configured NIM. Do not automatically add a disease from drug information.
+
+## Source context operation
+
+`{op:'context',pdf,index,page,start,end,before:0..3,after:0..5,nextPage:boolean}` -> `{hits:SourceHit[],truncated:boolean}`. Coordinates must refer to a known tool-returned hit. Blocks are original neighbors, not inferred legal sections. Context may be on another page only through the explicit nextPage option. DLI loop reference: https://nvdli.github.io/NemoClawDLI/nemoclaw/01b-react.html#the-react-loop . Read finish_reason, execute validated tools, append tool observations, repeat. InsureLens deliberately discards final free-form model text and emits its source contract instead.
+
+## Sourced product-reference bridge
+
+`resolveDrugReferences({query,description,confirmedTerms,products})` returns `{references,specificTerms,contextTerms}` from the reviewed, dated data/drug-references.json catalog. Exact brand mentions only. Each added term is a substring of a cited manufacturer source excerpt. These are product facts, never patient diagnoses, selected dosage/forms, live MFDS checks or eligibility decisions. Current catalog scope is Xofluza/Tamiflu; unknown brands still require official lookup.
+
+Result adds `references:ProductReference[]` (empty when unavailable). A reference has id,brand,aliases,scope:'product_reference',source:{publisher,url,landingUrl?,documentDate,checkedAt,type},facts:[{kind,label,quote,page,terms,priority:'specific'|'context'}]. Reference objects must match trusted application records exactly. User/LLM supplied reference objects are not accepted.
+
+PDF search optionally accepts `pages:number[]` (1-based, max20). Omitted means all pages, [] means no pages. Specific ingredient evidence is searched first; source-backed indication terms are searched around resulting pages when available. Highlight offsets and quotes remain original PDF text-layer spans.
+
+## Provider recovery
+
+NIM chat uses JSON object mode with thinking disabled for supported Nemotron models. JSON must parse without repair; source grounding remains independently enforced. The web adapter preserves cloud consent and maps transient/provider-format failures to an explicitly local rerun. `warnings` contains error codes, never provider bodies or credentials. Cancellation, ungrounded terms and source-integrity failures do not recover by bypassing verification.
+
+`finish_retrieval({})` is a third native tool for explicit completion after source retrieval. It accepts no answer or other fields and must be the only action in its turn. Unsupported tools, repeated calls and malformed controls terminate the model run; the web adapter may start a separate, labelled local investigation. Source-integrity and ungrounded-term errors still fail closed.

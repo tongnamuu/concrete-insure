@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {prescriptionCandidates} from '../src/agents/prescription.js';
+test('prescription candidates retain exact OCR spelling and labelled code',async()=>{const text='환자: 이름\n제품명: 제품에이75mg\n질병코드: J10.1';const result=await prescriptionCandidates(text);assert.deepEqual(result,['제품에이75mg','J10.1']);assert(!result.includes('독감'));});
+test('NIM candidate extraction cannot invent medicine-derived disease',async()=>{const nim={enabled:true,chat:async()=>'{"terms":["독감"]}'};await assert.rejects(()=>prescriptionCandidates('제품명: 약품에이',{nim,consent:true}),/UNGROUNDED_TERM/);});
+test('no consent means no external candidate extraction',async()=>{const nim={enabled:true,chat:async()=>{throw Error('must not call');}};assert.deepEqual(await prescriptionCandidates('성분명: 성분에이',{nim}),['성분에이']);});

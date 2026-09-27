@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import { chromium, expect } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+const base=process.env.TEST_URL||'http://127.0.0.1:8000';
+const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-browser-'));
+const pdf=process.env.PDF_FILE||path.join(temp,'policy.pdf');
+const term=process.env.SEARCH_TERM||'oseltamivir';
+if(!process.env.PDF_FILE)execFileSync(process.env.PDF_PYTHON||'.venv/bin/python',['-c',`import fitz,sys\nd=fitz.open()\np=d.new_page()\np.insert_text((72,72),'약품명: oseltamivir',fontname='korea')\nd.save(sys.argv[1])`,pdf]);
+const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+try{
+await page.goto(base);await expect(page.locator('#availability')).toHaveText('로컬 검색 가능');
+await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText(path.basename(pdf),{timeout:120000});await expect(page.locator('#pdfCanvas')).toBeVisible();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});
+await page.locator('#query').fill(term);await page.locator('#send').click();await expect(page.locator('.quote-card').first()).toBeVisible({timeout:120000});await expect(page.locator('.quote-card blockquote').first()).toContainText(term);
+await page.locator('.quote-card button').first().click();await page.locator('#zoomIn').click();await expect(page.locator('#zoomValue')).toHaveText('120%');await expect(page.locator('#highlights polygon').first()).toBeAttached();
+const downloadPromise=page.waitForEvent('download');await page.locator('#download').click();const download=await downloadPromise;await download.saveAs(path.join(temp,'marked.pdf'));
+const validation=execFileSync(process.env.PDF_PYTHON||'.venv/bin/python',['-c',`import fitz,sys\nd=fitz.open(sys.argv[1]); assert sum(len(list(p.annots() or [])) for p in d)>0; assert sys.argv[2] in ''.join(p.get_text() for p in d);print('standard annotations verified')`,path.join(temp,'marked.pdf'),term],{encoding:'utf8'}).trim();
+await page.reload();await expect(page.locator('#documentName')).toHaveText(path.basename(pdf));await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});await expect(page.locator('.quote-card')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();
+await page.locator('#query').fill(term);await page.locator('#send').click();await expect(page.locator('.quote-card').first()).toBeVisible({timeout:30000});await page.locator('#clearResults').click();await expect(page.locator('.quote-card')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await expect(page.locator('#pdfCanvas')).toBeVisible();
+await page.locator('#query').fill(term);await page.locator('#send').click();await expect(page.locator('.quote-card').first()).toBeVisible({timeout:30000});
+if(!process.env.PDF_FILE){await page.locator('#medicalFile').setInputFiles(pdf);await expect(page.locator('#ocrPanel')).toBeVisible({timeout:30000});await expect(page.locator('#ocrText')).toContainText('oseltamivir');await expect(page.locator('#confirmedTerms')).toHaveValue('oseltamivir');await expect(page.locator('#ocrPanel .badge')).toHaveText('확인 전');await expect(page.locator('#medicalOriginal')).toHaveAttribute('href',/^blob:/);const unconfirmed=page.waitForRequest(r=>r.url().endsWith('/investigations')&&r.method()==='POST');await page.locator('#query').fill(term);await page.locator('#send').click();assert.deepEqual((await unconfirmed).postDataJSON().confirmedTerms,[]);await expect(page.locator('.investigation-result')).toHaveCount(2,{timeout:30000});await page.locator('#confirmedTerms').fill(term);await page.locator('#confirmTerms').click();await expect(page.locator('#termsStatus')).toHaveText('1개 항목을 확인했습니다.');await page.locator('#medicalFile').setInputFiles(pdf);await expect(page.locator('#termsHint')).toHaveText('입력하신 사실을 기준으로 찾습니다');await expect(page.locator('#ocrPanel .badge')).toHaveText('확인 전');await expect(page.locator('#progress')).toBeHidden({timeout:30000});await expect(page.locator('#confirmedTerms')).toHaveValue('oseltamivir');await page.locator('#confirmTerms').click();}
+if(process.env.SCREENSHOT)await page.screenshot({path:process.env.SCREENSHOT,fullPage:true});
+if(!process.env.PDF_FILE){await page.locator('#query').fill('Influenza');await page.locator('#send').click();await expect(page.locator('.investigation-result')).toHaveCount(3,{timeout:30000});await page.locator('.quote-card button').first().click();await expect(page.locator('#highlights polygon').first()).toBeAttached();await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('.quote-card')).toHaveCount(0,{timeout:30000});await expect(page.locator('#download')).toBeDisabled();await expect(page.locator('#progress')).toBeHidden({timeout:30000});await expect(page.locator('#error')).toBeHidden();await expect(page.locator('#pdfCanvas')).toBeVisible();}
+page.on('dialog',dialog=>dialog.accept());await page.locator('#clearCase').click();await expect(page.locator('#documentName')).toHaveText('약관 원문');
+if(errors.length)throw new Error(JSON.stringify(errors));console.log(JSON.stringify({ok:true,upload:true,search:true,pdfTextLayer:true,quadHighlight:true,zoom:true,download:validation,restoreDocument:true,clearResults:true,completedResultsNotRestored:true,ocrConfirmation:!process.env.PDF_FILE,delete:true,browserErrors:errors}));
+}catch(e){console.error('UI error:',await page.locator('#error').textContent());console.error('Browser errors:',errors);throw e;}finally{await browser.close();await rm(temp,{recursive:true,force:true});}
