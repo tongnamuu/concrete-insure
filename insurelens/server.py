@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException
 
-from .core import AppError, DrugLookupRequest, QueryRequest, ensure
+from .core import AppError, DrugLookupRequest, QueryRequest, ResumeSelectionRequest, ensure
 from .pdf import pdf_operation
 from .store import Queue, Store
 from .nat import configured_investigation
@@ -363,16 +363,81 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
             store.add_turn(body.conversationId, job_id, body.model_dump())
 
         async def run(emit):
-            result = await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, drugs=drugs, emit=emit, operation=pdf, **({'conversation': context} if context is not None else {}))
+            saved_facts = None
+            def on_selection(facts):
+                nonlocal saved_facts
+                saved_facts = facts
+            result = await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, drugs=drugs, emit=emit, operation=pdf, on_selection=on_selection, **({'conversation': context} if context is not None else {}))
             if result.get('requiresDrugSelection'):
                 candidates = case_for(identifier, request)['products']
                 candidates.update({p['id']: p for p in result['products']})
                 ensure(len(candidates) <= 300, 'DRUG_RESULT_LIMIT', 429)
                 store.set_products(case['id'], candidates)
+                from .selection import selection_snapshot
+                snapshot = selection_snapshot(facts=saved_facts, request=body.model_dump(), conversation=context,
+                                              products=products + result['products'], document=case['document'])
+                store.save_selection(job_id, case['id'], case['document']['id'], body.conversationId, snapshot)
             return result
 
         app.state.queue.add(job_id, run)
         return {"jobId": job_id}
+
+    @app.post("/api/jobs/{identifier}/resume", status_code=202)
+    async def resume_selection(identifier: UUID, request: Request, body: ResumeSelectionRequest):
+        from .selection import selection_snapshot, validate_saved_facts
+        from .conversation import model_context
+        store = app.state.store
+        source = store.job(str(identifier), request.state.owner)
+        case = case_for(source['caseId'], request)
+        ensure(body.cloudConsent, 'NIM_CONSENT_REQUIRED', 409)
+        ensure(nim.enabled, 'NVIDIA_KEY_REQUIRED', 409)
+        ensure(source['kind'] == 'investigation' and source['state'] == 'completed' and
+               (source['result'] or {}).get('requiresDrugSelection'), 'SELECTION_EXPIRED', 409)
+        ensure(case['document'] and source['documentId'] == case['document']['id'], 'SELECTION_EXPIRED', 409)
+        conversation = store.conversation(case['id'], case['document']['id'])
+        checkpoint = store.selection(source['id'])
+        if checkpoint is None:
+            # Migrate legacy pending turns from their stored, already-grounded fields.
+            # No new inference or client-supplied text is used to reconstruct them.
+            ensure(conversation['turns'] and conversation['turns'][-1]['jobId'] == source['id'], 'SELECTION_EXPIRED', 409)
+            turn = conversation['turns'][-1]
+            original = QueryRequest(query=turn['query'], description=turn['description'], confirmedTerms=turn['confirmedTerms'],
+                                    conversationId=conversation['id']).model_dump()
+            facts = {'query': turn['query'], 'description': turn['description'],
+                     'terms': source['result'].get('terms'), 'drugNames': source['result'].get('drugNames')}
+            snapshot = selection_snapshot(facts=facts, request=original, conversation=model_context(conversation['turns'][:-1]),
+                                          products=source['result']['products'], document=case['document'])
+            store.save_selection(source['id'], case['id'], source['documentId'], conversation['id'], snapshot)
+            checkpoint = store.selection(source['id'])
+        current_id = checkpoint['resume_job_id'] or source['id']
+        ensure(checkpoint['case_id'] == case['id'] and checkpoint['document_id'] == case['document']['id'], 'SELECTION_EXPIRED', 409)
+        if checkpoint['conversation_id']:
+            ensure(conversation['id'] == checkpoint['conversation_id'] and conversation['turns'] and
+                   conversation['turns'][-1]['jobId'] == current_id, 'SELECTION_EXPIRED', 409)
+        else:
+            investigations = [j for j in store.jobs(case['id']) if j['kind'] == 'investigation']
+            ensure(not conversation['id'] and investigations and investigations[0]['id'] == current_id, 'SELECTION_EXPIRED', 409)
+        snapshot = checkpoint['payload']
+        ensure(snapshot['version'] == 1 and snapshot['documentHash'] == case['document'].get('hash', case['document'].get('documentHash')),
+               'SELECTION_EXPIRED', 409)
+        original = {**snapshot['request'], 'cloudConsent': True, 'drugIds': body.drugIds}
+        validate_saved_facts(snapshot['facts'], original, snapshot['conversation'])
+        ensure(all(i in snapshot['products'] for i in body.drugIds), 'DRUG_SELECTION_REQUIRED', 409)
+        products = [snapshot['products'][i] for i in body.drugIds]
+        ensure(all(any(n.casefold() in p['name'].casefold() for p in products) for n in snapshot['facts']['drugNames']),
+               'DRUG_SELECTION_INCOMPLETE', 409)
+        ensure(all(j['state'] not in ('queued', 'running') or j['id'] == current_id for j in store.jobs(case['id'])), 'CASE_BUSY', 429)
+        job_id, created = store.resume_selection(checkpoint, body.drugIds)
+        if created:
+            async def continue_run(emit):
+                record('job.resumed')
+                result = await investigate(document=case['document'], request=original, products=products,
+                                           nim=nim, drugs=drugs, emit=emit, operation=pdf,
+                                           conversation=snapshot['conversation'], resume_facts=snapshot['facts'])
+                ensure(not result.get('requiresDrugSelection'), 'DRUG_SELECTION_INCOMPLETE', 409)
+                return result
+            app.state.queue.add(job_id, continue_run)
+        return {'jobId': job_id}
 
     @app.get("/api/jobs/{identifier}")
     async def job(identifier: UUID, request: Request):

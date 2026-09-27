@@ -46,6 +46,19 @@ class QueryRequest(BaseModel):
         return self
 
 
+class ResumeSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    drugIds: list[DrugId] = Field(min_length=1, max_length=5)
+    cloudConsent: bool = False
+
+    @field_validator('drugIds')
+    @classmethod
+    def unique_products(cls, ids):
+        if len(ids) != len(set(ids)):
+            raise ValueError('Duplicate selected product')
+        return ids
+
+
 class DrugLookupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     name: str = Field(min_length=2, max_length=120)

@@ -33,16 +33,22 @@ def arguments(call, keys):
         raise AppError('INVALID_TOOL_ARGUMENTS', 502) from error
 
 
-async def run_investigation(*, document, request, products=None, nim=None, emit=lambda event, data: None, operation=pdf_operation, conversation=None, drugs=None):
+async def run_investigation(*, document, request, products=None, nim=None, emit=lambda event, data: None, operation=pdf_operation, conversation=None, drugs=None, resume_facts=None, on_selection=None):
     ensure(getattr(nim, 'enabled', False), 'NVIDIA_KEY_REQUIRED', 409)
     ensure(request.get('cloudConsent') is True, 'NIM_CONSENT_REQUIRED', 409)
-    facts = await model_progress(understand_input_with_model(request, nim, conversation=conversation),
-                                 emit=emit, stage='input', label='검색 1단계')
+    if resume_facts is None:
+        facts = await model_progress(understand_input_with_model(request, nim, conversation=conversation),
+                                     emit=emit, stage='input', label='검색 1단계')
+    else:
+        from insurelens.selection import validate_saved_facts
+        facts = validate_saved_facts(resume_facts, request, conversation)
     if products or facts['drugNames']:
         emit('stage_started', {'stage': 'drug_reference', 'message': '검색 2단계'})
     reference = await investigate_if_needed(names=facts['drugNames'], products=products, nim=nim, drugs=drugs,
                                             emit=emit, consent=request.get('cloudConsent'))
     if reference['requiresSelection']:
+        if on_selection is not None:
+            on_selection(facts)
         return {'mode': 'nim-react', 'requiresDrugSelection': True, 'products': reference['products'],
                 'missingNames': reference['missingNames'], 'drugNames': facts['drugNames'], 'truncated': reference.get('truncated', False),
                 'quotes': [], 'references': [], 'mappings': [], 'terms': facts['terms']}
@@ -53,7 +59,8 @@ async def run_investigation(*, document, request, products=None, nim=None, emit=
     if request.get('translation'):
         gloss = await model_progress(nim.gloss(terms.copy()), emit=emit, stage='translation', label='검색 1단계')
         ensure(len(gloss) == len(terms) and all(x['id'] == i and x['original'] == terms[i] for i, x in enumerate(gloss)), 'TRANSLATION_BOUNDARY')
-    emit('stage_completed', {'stage': 'input', 'message': '검색 1단계'})
+    if resume_facts is None:
+        emit('stage_completed', {'stage': 'input', 'message': '검색 1단계'})
     hits = {}
     truncated, searched, scope_pages = False, False, None
     context_ids = {i for i, t in enumerate(terms) if t in reference['contextTerms'] and t not in facts['terms']}

@@ -7,6 +7,7 @@ The final user specification supersedes the earlier claim-screening proposal: no
 | Module | Implementation | Input/output contract |
 |---|---|---|
 | Intake and job API | insurelens/server.py,insurelens/store.py | Authenticated case-scoped uploads and jobs, replayable SSE |
+| Product-selection continuation | insurelens/selection.py,insurelens/store.py | Server-owned facts/candidates/context → fresh consent and ingredient-stage continuation |
 | Conversation context | insurelens/conversation.py,insurelens/store.py | Server-owned successful turns and bounded prior source excerpts → follow-up context |
 | Document worker | insurelens/pdf.py,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
 | Prescription reading | Nvidia.ocr, PDF text/render tools | Image or prescription PDF → draft text requiring confirmation |
@@ -54,7 +55,7 @@ No documented generic build.nvidia.com "Skill API" was verified. Therefore this 
 
 ## Product-reference bridge
 
-An explicit medicine name triggers a live MFDS lookup. Unselected products yield a requiresDrugSelection result, persisted with the conversation but excluded from evidence history. Selection must use case-owned candidate IDs; details are freshly fetched for the exact ID. MFDS failures never use static references. No branded catalog remains.
+An explicit medicine name triggers a live MFDS lookup. Unselected products yield a requiresDrugSelection result, persisted with the conversation but excluded from evidence history. The server also saves original request options, validated input facts, frozen conversation context, document hash and candidate IDs in a selection checkpoint. Selection resumes from the medicine agent with those facts, skipping input inference and candidate lookup. IDs must belong to that checkpoint, not merely the same case; details are freshly fetched for the exact ID. Resuming creates a new execution job and atomically replaces the job pointer of the same conversation turn. Repeated identical submissions return the active/completed job; failed/cancelled attempts can be retried from the saved input. Every resume requires fresh consent. New questions, conversations and document replacements invalidate earlier continuations. Saved pending turns from earlier versions can be reconstructed from server-owned grounded fields. This is application-stage persistence, not a suspended NAT/LangGraph execution or automatic background resume. MFDS failures never use static references. No branded catalog remains.
 
 References retain source URL, retrieval timestamp, permit/change/cancellation fields, original field or XML paragraph, and document hash. XML entities/DTDs are rejected; HTML in CDATA is decoded to text without rewriting. Only structured ingredient names and explicit supported prodrug-to-active-metabolite sentences create specific terms. Treatment headings supply source-bound context terms; prophylaxis never establishes treatment. Unsupported relations remain unresolved. A process-local verified-reference marker detects later tampering; client JSON cannot create trusted references. Previous saved results remain viewable and labelled with their original provenance.
 

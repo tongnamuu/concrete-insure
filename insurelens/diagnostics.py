@@ -14,7 +14,7 @@ from .core import AppError
 
 _context = ContextVar('insurelens_diagnostics', default={})
 EVENTS = {'app.started', 'app.stopped', 'request.completed', 'request.error',
-          'job.queued', 'job.started', 'job.stage', 'job.finished',
+          'job.queued', 'job.started', 'job.stage', 'job.finished', 'job.resumed',
           'operation.started', 'operation.completed', 'operation.failed',
           'operation.cancelled', 'provider.response', 'provider.retry', 'agent.routed', 'agent.tool', 'agent.completed'}
 ENUMS = {
@@ -36,7 +36,7 @@ ROUTES = {'/', '/vendor/pdfjs', '/api/config', '/api/cases', '/api/cases/{identi
           '/api/cases/{identifier}/documents', '/api/cases/{identifier}/ocr',
           '/api/cases/{identifier}/drugs', '/api/cases/{identifier}/pdf',
           '/api/cases/{identifier}/investigations', '/api/jobs/{identifier}',
-          '/api/jobs/{identifier}/cancel', '/api/jobs/{identifier}/events',
+          '/api/jobs/{identifier}/cancel', '/api/jobs/{identifier}/resume', '/api/jobs/{identifier}/events',
           '/api/jobs/{identifier}/annotated.pdf'}
 NUMBERS = {'steps', 'duration_ms', 'wait_ms', 'elapsed_seconds', 'timeout_seconds', 'status',
            'prompt_tokens', 'completion_tokens', 'total_tokens', 'attempt', 'max_attempts', 'delay_seconds'}
