@@ -6,7 +6,7 @@ from insurelens.pdf import pdf_operation
 from insurelens.progress import model_progress
 from insurelens.agents.input import understand_input_with_model
 from insurelens.agents.drug import identify_drugs
-from insurelens.agents.drug_references import resolve_drug_references
+from insurelens.agents.drug_agent import investigate_if_needed
 from insurelens.agents.retrieval import retrieve_policy
 from insurelens.agents.policy_scope import inspect_policy_scope
 from insurelens.agents.verification import assemble_evidence
@@ -40,8 +40,8 @@ async def run_investigation(*, document, request, products=None, nim=None, emit=
                                  emit=emit, stage='input', label='검색 1단계')
     if products or facts['drugNames']:
         emit('stage_started', {'stage': 'drug_reference', 'message': '검색 2단계'})
-    identify_drugs(products)  # Validate server-owned selected records before calling MFDS.
-    reference = await resolve_drug_references(products=products, drug_names=facts['drugNames'], drugs=drugs)
+    reference = await investigate_if_needed(names=facts['drugNames'], products=products, nim=nim, drugs=drugs,
+                                            emit=emit, consent=request.get('cloudConsent'))
     if reference['requiresSelection']:
         return {'mode': 'nim-react', 'requiresDrugSelection': True, 'products': reference['products'],
                 'missingNames': reference['missingNames'], 'drugNames': facts['drugNames'], 'truncated': reference.get('truncated', False),

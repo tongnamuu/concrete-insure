@@ -35,3 +35,10 @@
 - 입력 원문·키·임의 필드·원시 예외 메시지가 로그에 남지 않는지 확인한다.
 - 로깅이 SSE 전달, 작업 취소, 원문 검증을 방해하지 않는지 확인한다.
 - 관련 검사는 `tests/test_diagnostics.py`와 기존 실행 경로 검사에서 수행한다. 테스트 대역의 결과를 외부 서비스의 가용성 검증으로 표현하지 않는다.
+
+## 조건부 에이전트 기록
+
+- `agent.routed`: `agent=drug_evidence`, `decision=invoke|skip`, `reason=explicit_drug_name|selected_product|no_drug_information`.
+- `agent.tool`: 고정된 도구 이름만 기록한다. 이름/제품 ID와 도구 입력·결과는 기록하지 않는다.
+- `agent.completed`: 구조화된 완료 상태와 단계 수만 기록한다. 모델 사고 과정과 생성 문장은 출력하지 않는다.
+- NAT 에이전트의 `verbose`는 끄고 별도 추적 exporter를 설정하지 않는다. 모델 도구 인자는 프레임워크 실행 전에 검증하여 검증 예외에 원시 인자가 노출되지 않게 한다.

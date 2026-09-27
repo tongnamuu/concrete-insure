@@ -45,24 +45,33 @@ try:
 except ModuleNotFoundError as error:
     raise AppError("NAT_RUNTIME_MISSING", 503) from error
 from pydantic import Field
+from nat.data_models.component_ref import FunctionRef
+from insurelens import nat_drug  # Register native medicine tools and SDK adapter.
+from insurelens.agents.drug_agent import _runner as drug_runner
 
 
 class InsureLensConfig(FunctionBaseConfig, name="insurelens_python"):
     timeout_seconds: float = Field(default=1200, ge=1, le=3600)
+    drug_agent: FunctionRef = "drug_evidence_agent"
 
 
 @register_function(config_type=InsureLensConfig)
 async def register(config: InsureLensConfig, builder: Builder):
+    specialist = await builder.get_function(config.drug_agent)
+
     async def run(invocation_token: str) -> str:
+        handle = drug_runner.set(specialist)
         try:
             async with asyncio.timeout(config.timeout_seconds):
                 return await invoke_native(invocation_token)
         except TimeoutError:
             raise AppError("AGENT_TIMEOUT", 504) from None
+        finally:
+            drug_runner.reset(handle)
 
     yield FunctionInfo.from_fn(
         run,
-        description="Run InsureLens source-evidence subagents within an authorized Python server task. Input is an opaque invocation token only.",
+        description="Run the InsureLens policy workflow with a conditional native medicine agent within an authorized Python server task. Input is an opaque invocation token only.",
     )
 
 

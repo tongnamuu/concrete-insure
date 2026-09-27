@@ -2,7 +2,7 @@ import copy
 import json
 import httpx
 import pytest
-from insurelens.agents.drug_references import resolve_drug_references, verify_drug_references, reference_from_detail, paragraphs
+from insurelens.agents.drug_references import verify_drug_references, reference_from_detail, paragraphs
 from insurelens.agents.drug import identify_drugs
 from insurelens.providers import Drugs
 from insurelens.core import AppError
@@ -19,13 +19,11 @@ async def test_unknown_brand_uses_live_candidate_selection_then_source_documents
         return response([record])
     drugs=Drugs(env={'MFDS_API_KEY':'test'},transport=httpx.MockTransport(handle))
     try:
-        pending=await resolve_drug_references(drug_names=['새시험약'],drugs=drugs)
-        assert pending['requiresSelection'] and pending['references']==[]
+        pending=await drugs.lookup('새시험약')
+        assert pending['requiresSelection']
         assert calls[0].url.params['item_name']=='새시험약'
-        result=await resolve_drug_references(drug_names=['새시험약'],products=pending['products'],drugs=drugs)
-        assert not result['requiresSelection']
-        assert result['specificTerms']==['시험성분염']  # No unsourced salt stripping.
-        ref=result['references'][0]
+        ref=reference_from_detail(await drugs.detail(pending['products'][0]['id']))
+        assert ref['facts'][0]['terms']==['시험성분염']  # No unsourced salt stripping.
         assert ref['source']['type']=='mfds_label' and ref['source']['historicalApproval']=='unverified'
         assert ref['facts'][0]['quote']==record['MAIN_ITEM_INGR']
         assert verify_drug_references([ref])
@@ -53,12 +51,14 @@ async def test_metabolite_requires_explicit_positive_source_and_preserves_offset
 
 @pytest.mark.asyncio
 async def test_no_key_no_match_and_no_drug_do_not_fabricate_reference():
-    assert (await resolve_drug_references())['references']==[]
-    with pytest.raises(AppError,match='MFDS_KEY_REQUIRED'):await resolve_drug_references(drug_names=['새약'])
+    drugs=Drugs(env={})
+    try:
+        with pytest.raises(AppError,match='MFDS_KEY_REQUIRED'):await drugs.lookup('새약')
+    finally:await drugs.close()
     drugs=Drugs(env={'MFDS_API_KEY':'test'},transport=httpx.MockTransport(lambda r: response([])))
     try:
-        pending=await resolve_drug_references(drug_names=['새약'],drugs=drugs)
-        assert pending['missingNames']==['새약'] and pending['products']==[] and pending['references']==[]
+        pending=await drugs.lookup('새약')
+        assert pending['products']==[]
     finally:await drugs.close()
 
 

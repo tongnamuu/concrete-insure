@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from insurelens.agent import run_investigation
+from insurelens.nat import configured_investigation as run_investigation
 from insurelens.agents.input import understand_input_with_model
 from insurelens.conversation import model_context
 from insurelens.core import AppError
@@ -19,7 +19,7 @@ async def test_pending_selection_never_returns_policy_evidence_or_calls_react():
     try:
         result=await run_investigation(document={}, request={'query':'조플루자','cloudConsent':True},nim=nim,drugs=drugs,operation=no_pdf)
         assert result['requiresDrugSelection'] and len(result['products'])==2
-        assert result['quotes']==[] and nim.calls==['chat'] and len(calls)==1
+        assert result['quotes']==[] and nim.calls==['chat', 'drug_complete', 'drug_complete'] and len(calls)==1
         assert model_context([{'state':'completed','result':result}])==[]
         with pytest.raises(AppError,match='NIM_CONSENT_REQUIRED'):
             await run_investigation(document={},request={'query':'조플루자'},nim=nim,drugs=drugs,operation=no_pdf)

@@ -10,15 +10,16 @@ The final user specification supersedes the earlier claim-screening proposal: no
 | Conversation context | insurelens/conversation.py,insurelens/store.py | Server-owned successful turns and bounded prior source excerpts → follow-up context |
 | Document worker | insurelens/pdf.py,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
 | Prescription reading | Nvidia.ocr, PDF text/render tools | Image or prescription PDF → draft text requiring confirmation |
-| Input subagent | insurelens/agents/input.py | User query/situation description/confirmed text → literal terms |
-| Drug identity subagent | insurelens/agents/drug.py,Drugs.lookup | User-selected official product → unchanged ingredient fields |
-| Product reference resolver | insurelens/agents/drug_references.py,Drugs.detail | Literal brand → MFDS candidates → explicit selection → current label evidence → grounded retrieval terms; never a clinical fact |
-| Policy retrieval subagent | insurelens/agents/retrieval.py | Grounded term IDs or known source IDs → original spans |
-| ReAct supervisor | insurelens/agent.py | NIM native tool calls → tools → observations → next turn |
+| Input extraction | insurelens/agents/input.py | User query/situation description/confirmed text → literal terms |
+| Drug identity validation | insurelens/agents/drug.py,Drugs.lookup | User-selected official product → unchanged ingredient fields |
+| Medicine evidence agent | insurelens/agents/drug_agent.py,insurelens/nat_drug.py | Conditional NAT tool-calling agent → MFDS candidates/user selection or verified product evidence |
+| Product source parser | insurelens/agents/drug_references.py | Official fields and label paragraphs → literal facts, hashes and provenance |
+| Policy retrieval tools | insurelens/agents/retrieval.py | Grounded term IDs or known source IDs → original spans |
+| Policy ReAct agent | insurelens/agent.py | NIM native tool calls → tools → observations → next turn |
 | Evidence assembly | insurelens/agents/verification.py | Trusted source objects → structured result; no prose generation |
 | Web viewer | public/ | 1:1 split, uploads, explicit confirmation, source cards, PDF text-layer highlights |
 
-See contracts.md for exact fields. A prescription can be replaced by a free-text description (up to4,000characters). Description-only requests are valid. The description remains a separate, unchanged user statement and is never labelled as a verified clinical record. Exact-substring grounding covers query and description separately. Deterministic subagents deliberately do not make needless model calls. Each has a single responsibility and testable boundary. ReAct is applied where an observation changes the next retrieval action, not to calculation of coordinates or source slices.
+See contracts.md for exact fields. A prescription can be replaced by a free-text description (up to4,000characters). Description-only requests are valid. The description remains a separate, unchanged user statement and is never labelled as a verified clinical record. Exact-substring grounding covers query and description separately. Deterministic tools perform source parsing and validation without model calls. Each has a single responsibility and testable boundary. ReAct is applied where an observation changes the next retrieval action, not to calculation of coordinates or source slices.
 
 ## Provider connections
 
@@ -64,3 +65,13 @@ The supervisor exposes an empty-argument finish_retrieval tool so native callers
 ## Policy benefit and source grouping
 
 The application can identify an expressly described benefit and distinguish direct wording from an indirect ingredient link. `policy_scope.py` reads grouped source articles after retrieval and returns source IDs, fixed connection labels and pending verification items. It never generates policy quotations or predicts a payout. `pdf_worker.sections` recognizes numbered special-rider titles, handles nested parentheses in article headings and stops at the next rider. Source spans are merged contiguously within each page without rewriting. Unknown layouts and weak/negative connections remain unresolved. Referenced general provisions/appendices are flagged for further verification, not presumed satisfied. Blank context is filtered both server-side and in the viewer; duplicated glyph highlights are suppressed.
+
+## Conditional native medicine agent
+
+The parent workflow binds NAT's `drug_evidence_agent` through `Builder.get_function`. After literal input extraction, Python routing calls it only for explicit medicine names or user-selected products. A disease/accident alone does not cause specialist inference or an MFDS lookup. Names found only in policy evidence cannot activate it.
+
+`nat-workflow.yml` registers the native `tool_calling_agent`, the `medicine` Function Group, and the `insurelens_evidence_nim` LLM adapter. The latter delegates through the existing NeMo Microservices SDK, preserving timeout/retry/privacy rules without switching clients. NAT/LangGraph owns the medicine tool-selection/observation loop; `return_direct` terminates through `finish_evidence` without another model call. The skill instructions are loaded from `skills/drug-ingredient-resolver/SKILL.md` at runtime. Per-request ContextVars isolate the allowed names/products, evidence ledger and authorized providers across tasks. Tool indexes cannot select arbitrary product IDs. Failed or fabricated final answers are rejected.
+
+The upper policy-search loop remains application-owned ReAct. Input extraction, PDF parsing, source verification and annotation are not independent LLM agents. The former fixed medicine resolver orchestration has been removed; CLI lookup/detail remain deterministic adapters to the same provider/parser.
+
+Official APIs: [NAT Tool Calling Agent](https://docs.nvidia.com/nemo/agent-toolkit/latest/components/agents/tool-calling-agent/tool-calling-agent.html) and [Function Groups](https://docs.nvidia.com/nemo/agent-toolkit/latest/build-workflows/functions-and-function-groups/function-groups.html). The installed 1.9.0 implementation was also inspected for typed inputs, `return_direct`, error propagation and cancellation.

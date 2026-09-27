@@ -1,5 +1,4 @@
 """Source-bound MFDS references. No product catalog or model-authored drug facts."""
-import asyncio
 import hashlib
 import json
 import re
@@ -58,7 +57,7 @@ def paragraphs(xml):
     return result
 
 
-def reference_from_detail(detail):
+def reference_from_detail(detail, *, include_label=True):
     """Extract only structured ingredients and explicit, narrowly supported relations."""
     product, documents = detail['product'], detail['documents']
     facts = []
@@ -87,7 +86,7 @@ def reference_from_detail(detail):
                 if field.startswith('MTRAL_NM:') and 1 < len(text) <= 120:
                     fact('ingredient', '식약처 주성분 상세 원문', field, 0, text, [text], 'specific')
 
-    for field in ('PN_DOC_DATA', 'NB_DOC_DATA', 'EE_DOC_DATA'):
+    for field in (('PN_DOC_DATA', 'NB_DOC_DATA', 'EE_DOC_DATA') if include_label else ()):
         for ordinal, text in enumerate(paragraphs(documents.get(field, ''))):
             # Selection is literal. Preserve the entire paragraph as evidence;
             # do not fabricate a short quote by joining separated spans.
@@ -123,42 +122,3 @@ def verify_drug_references(references):
         ensure(isinstance(ref, VerifiedReference) and ref.digest() == ref._digest, 'UNVERIFIED_DRUG_REFERENCE')
         ensure(all(t in f['quote'] for f in ref['facts'] for t in f['terms']), 'UNGROUNDED_REFERENCE_TERM')
     return references
-
-
-async def resolve_drug_references(*, products=None, drug_names=None, drugs=None):
-    products, drug_names = products or [], drug_names or []
-    ensure(len(products) <= 5 and len(drug_names) <= 5, 'DRUG_RESULT_LIMIT')
-    if not products and not drug_names:
-        return {'references': [], 'specificTerms': [], 'contextTerms': [], 'products': [], 'requiresSelection': False, 'missingNames': []}
-    ensure(drugs is not None and drugs.enabled, 'MFDS_KEY_REQUIRED', 409)
-    # Selection is always explicit, including a search yielding a single item.
-    missing = [n for n in drug_names if not any(n.casefold() in p['name'].casefold() for p in products)]
-    if missing:
-        candidates, unmatched, truncated = {}, [], False
-        for name in missing:
-            response = await drugs.lookup(name)
-            truncated |= response.get('truncated', False)
-            if not response['products']:
-                unmatched.append(name)
-            candidates.update({p['id']: p for p in response['products']})
-        return {'references': [], 'specificTerms': [], 'contextTerms': [], 'products': list(candidates.values()),
-                'requiresSelection': True, 'missingNames': unmatched, 'truncated': truncated}
-    # Independent selected products can be fetched concurrently, with a bound.
-    gate = asyncio.Semaphore(2)
-    async def fetch(product):
-        async with gate:
-            return await drugs.detail(product['id'])
-    tasks = [asyncio.create_task(fetch(p)) for p in products]
-    try:
-        details = await asyncio.gather(*tasks)
-    finally:
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-    references = [reference_from_detail(d) for d in details]
-    verify_drug_references(references)
-    def terms(priority):
-        return list(dict.fromkeys(t for r in references for f in r['facts'] if f['priority'] == priority for t in f['terms']))
-    return {'references': references, 'specificTerms': terms('specific'), 'contextTerms': terms('context'),
-            'products': [d['product'] for d in details], 'requiresSelection': False, 'missingNames': []}

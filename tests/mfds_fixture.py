@@ -36,3 +36,19 @@ class DrugNim(ScriptedNim):
         original=payload.get('query','')+payload.get('description','')
         value['drugNames']=['조플루자'] if '조플루자' in original else []
         return json.dumps(value,ensure_ascii=False)
+
+    async def complete(self, messages, tools):
+        if not any(t['function']['name'].startswith('medicine__') for t in tools):
+            return await super().complete(messages, tools)
+        self.calls.append('drug_complete')
+        payload = json.loads(next(m['content'] for m in messages if m['role'] == 'user'))
+        done = [(m['tool_calls'][0]['function']['name'], json.loads(m['tool_calls'][0]['function']['arguments']))
+                for m in messages if m['role'] == 'assistant' and m.get('tool_calls')]
+        steps = [('lookup_products', {'name_id': n['name_id']}) for n in payload['names']]
+        if not payload['requiresSelection']:
+            steps = [(name, {'product_id': p['product_id']}) for p in payload['selectedProducts']
+                     for name in ('inspect_ingredients', 'inspect_label')]
+        steps += [('finish_evidence', {})]
+        name, args = next((name, args) for name, args in steps if ('medicine__'+name, args) not in done)
+        return {'finish_reason': 'tool_calls', 'message': {'role': 'assistant', 'content': None, 'tool_calls': [
+            {'id': 'drug-'+str(len(done)), 'type': 'function', 'function': {'name': 'medicine__'+name, 'arguments': json.dumps(args)}}]}}
