@@ -1,0 +1,13 @@
+{
+  "ITEM_SEQ": "202012345",
+  "ITEM_NAME": "조플루자정20밀리그램",
+  "ENTP_NAME": "가상 시험 업체",
+  "ITEM_INGR_NAME": "Baloxavir Marboxil",
+  "MAIN_ITEM_INGR": "[TEST01]발록사비르 마르복실",
+  "ITEM_PERMIT_DATE": "20200101",
+  "CHANGE_DATE": "20260101",
+  "CANCEL_NAME": "정상",
+  "EE_DOC_DATA": "<DOC><SECTION><PARAGRAPH><![CDATA[1. 인플루엔자 감염증의 치료]]></PARAGRAPH><PARAGRAPH><![CDATA[시험용 치료 조건 원문.]]></PARAGRAPH><PARAGRAPH><![CDATA[2. 노출 후 인플루엔자 감염증의 예방]]></PARAGRAPH></SECTION></DOC>",
+  "NB_DOC_DATA": "",
+  "PN_DOC_DATA": "<DOC><SECTION><PARAGRAPH><![CDATA[시험용 문장: 이 약은 전구약물로 활성 대사물 발록사비르로 전환된다.]]></PARAGRAPH></SECTION></DOC>"
+}

@@ -1,5 +1,6 @@
 """Synthetic MFDS HTTP responses for tests only; no production fallback."""
 import json
+from pathlib import Path
 import httpx
 from insurelens.providers import Drugs
 from tests.nim_fixture import ScriptedNim
@@ -11,11 +12,11 @@ def xml(*texts):
     return '<DOC><SECTION>' + ''.join('<PARAGRAPH><![CDATA['+t+']]></PARAGRAPH>' for t in texts) + '</SECTION></DOC>'
 
 def row(identifier=ITEM_ID, name=NAME):
-    return {'ITEM_SEQ':identifier, 'ITEM_NAME':name, 'ENTP_NAME':'가상 시험 업체',
-            'ITEM_INGR_NAME':'Baloxavir Marboxil', 'MAIN_ITEM_INGR':'[TEST01]발록사비르 마르복실',
-            'ITEM_PERMIT_DATE':'20200101', 'CHANGE_DATE':'20260101', 'CANCEL_NAME':'정상',
-            'EE_DOC_DATA':xml('1. 인플루엔자 감염증의 치료', '시험용 치료 조건 원문.', '2. 노출 후 인플루엔자 감염증의 예방'),
-            'NB_DOC_DATA':'', 'PN_DOC_DATA':xml('시험용 문장: 이 약은 전구약물로 활성 대사물 발록사비르로 전환된다.')}
+    # Read a fresh object so individual test mutations cannot leak to other tests.
+    value = json.loads((Path(__file__).parent / 'fixtures/mfds-product.json').read_text(encoding='utf-8'))
+    value.update(ITEM_SEQ=identifier, ITEM_NAME=name)
+    return value
+
 
 def response(items, total=None, code='00'):
     return httpx.Response(200, json={'header':{'resultCode':code},'body':{'items':items,'totalCount':len(items) if total is None else total}})
