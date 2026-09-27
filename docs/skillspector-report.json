@@ -2,7 +2,7 @@
   "skill": {
     "name": "insure-lens-source",
     "source": "./skills/insure-lens-source",
-    "scanned_at": "2026-09-27T12:14:14.399199+00:00"
+    "scanned_at": "2026-09-27T12:56:39.594430+00:00"
   },
   "risk_assessment": {
     "score": 0,
@@ -14,9 +14,9 @@
     {
       "path": "SKILL.md",
       "type": "markdown",
-      "lines": 19,
+      "lines": 20,
       "executable": false,
-      "size_bytes": 2661,
+      "size_bytes": 3005,
       "source_url": null,
       "source_identity": null,
       "source_digest": null
@@ -24,9 +24,9 @@
     {
       "path": "references/contracts.md",
       "type": "markdown",
-      "lines": 7,
+      "lines": 9,
       "executable": false,
-      "size_bytes": 1338,
+      "size_bytes": 1695,
       "source_url": null,
       "source_identity": null,
       "source_digest": null

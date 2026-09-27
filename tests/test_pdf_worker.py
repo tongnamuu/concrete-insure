@@ -126,6 +126,33 @@ class PDFTests(unittest.TestCase):
         self.assertEqual((count,skipped),(4,0))
         with self.assertRaisesRegex(ValueError,'INVALID_CONTEXT'):w.context(doc,1,-1)
 
+    def test_blank_context_filtered_without_rewriting_source(self):
+        text='독감 원문\n  \n\u200b\n후속 원문\n'
+        lines=text.splitlines(keepends=True);blocks=[];offset=0
+        for line in lines:blocks.append([offset,offset+len(line)]);offset+=len(line)
+        page={'number':1,'text':text,'blocks':blocks,'chars':''};doc={'hash':'x','pages':[page]}
+        hit=w.search(doc,['독감'])['hits'][0]
+        result=w.context(doc,1,hit['start'],hit['end'],after=4)
+        self.assertEqual([h['quote'] for h in result['hits']],['독감 원문\n','후속 원문\n'])
+        for h in result['hits']:w.verify(doc,h)
+
+    def test_policy_sections_include_full_clauses_and_stop_at_next_rider(self):
+        d=fitz.open();p=d.new_page()
+        lines=['6-36 독감(인플루엔자) 특별약관','제1조 (보험금의 지급사유)','독감 치료 목적으로 처방받으면 보험금을 지급합니다.','제2조 (독감(인플루엔자)의 정의 및 진단확정)','발록사비르(baloxavir) 성분 안내']
+        for i,text in enumerate(lines):p.insert_text((40,60+i*45),text,fontname='korea')
+        p=d.new_page()
+        lines=['제3조 (보험금을 지급하지 않는 사유)','보통약관 제8조를 따릅니다.','제4조 (보험금의 청구)','처방전과 청구서를 제출합니다.','6-37 다른 질병 특별약관','제1조 (보험금의 지급사유)','다른 질병에는 다른 기준을 적용합니다.']
+        for i,text in enumerate(lines):p.insert_text((40,60+i*45),text,fontname='korea')
+        data=d.tobytes();doc=w.extract(data);anchor=w.search(doc,['발록사비르'])['hits'][0]
+        result=w.policy_sections(doc,[anchor]);self.assertEqual(len(result['sections']),1)
+        section=result['sections'][0];self.assertEqual([c['kind'] for c in section['clauses']],['payment','definition','exclusion','claim'])
+        hits=[section['title']]+[h for c in section['clauses'] for h in c['hits']]
+        self.assertTrue(all('다른 질병' not in h['quote'] for h in hits))
+        for h in hits:w.verify(doc,h)
+        _,count,_=w.annotate(data,doc,hits);self.assertEqual(count,len(hits))
+        bad=copy.deepcopy(anchor);bad['quote']='invented'
+        with self.assertRaisesRegex(ValueError,'SOURCE_INTEGRITY'):w.policy_sections(doc,[bad])
+
     def test_worker_reextracts_before_annotation(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);pdf=root/'x.pdf';idx=root/'x.json.gz';pdf.write_bytes(document())

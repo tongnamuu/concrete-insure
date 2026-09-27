@@ -23,4 +23,4 @@ export function groundedTerms(raw,query,confirmed=[],description=''){
  const v=z.object({terms:z.array(termSchema).max(25)}).strict().parse(JSON.parse(raw));
  ensure(v.terms.every(t=>query.includes(t)||description.includes(t)||confirmed.includes(t)),'UNGROUNDED_TERM');return v.terms;
 }
-export const NOTICE='아래 내용은 약관 원문과 확인된 의약품 정보입니다. 질병을 추정하거나 보험금 지급 여부를 판단하지 않습니다. 검색 결과 없음은 보장 제외를 뜻하지 않습니다.';
+export const NOTICE='보장 항목 확인은 약관의 지급사유와 관련 표현을 찾은 결과입니다. 실제 보장은 가입 특약·진단·처방 내용과 지급 조건을 확인해야 합니다. 검색 결과 없음은 보장 제외를 뜻하지 않습니다.';

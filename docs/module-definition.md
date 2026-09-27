@@ -12,6 +12,7 @@
 | 약품 확인 subagent | 사용자가 고른 공식 제품 ID | 공식 성분명/제조원/출처 | 식약처 API 기록 |
 | 검색 subagent | 검증된 검색어 ID/기존 hit ID | 원문 span/페이지/좌표 | PDF search/context 도구 |
 | ReAct supervisor | 위 상태와 tool observation | 다음 허용 도구 호출 또는 종료 | Nemotron native tool calling |
+| 보장 항목 연결 | 특약 조항 원문·제품 근거 | 보장 항목 존재·직접/성분 간접 연결·실제 보장 확인사항 | 규칙 기반 코드, 지급 판단 없음 |
 | 원문 검증 subagent | 검색 결과와 source span | 구조화된 인용/제품 사실 | 애플리케이션 코드, 자유문 생성 없음 |
 | 결과 표시 | 검증된 결과 | 1:1 웹 화면/표준 PDF 주석 | PDF.js, native Highlight |
 | 작업 관리 | 요청/취소 | 저장된 결과, SSE 상태 이벤트 | SQLite, NAT workflow, Node queue |

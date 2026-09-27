@@ -6,6 +6,7 @@ import { understandInputWithModel } from './agents/input.js';
 import { identifyDrugs } from './agents/drug.js';
 import { resolveDrugReferences } from './agents/drug-references.js';
 import { retrievePolicy } from './agents/retrieval.js';
+import { inspectPolicyScope } from './agents/policy-scope.js';
 import { assembleEvidence } from './agents/verification.js';
 const skill=readFileSync(new URL('../skills/insure-lens-source/SKILL.md',import.meta.url),'utf8');
 export const tools=[{type:'function',function:{name:'search_policy',description:'Search original PDF using only IDs of supplied explicit terms. Returns original source spans, never eligibility judgments.',parameters:{type:'object',properties:{ids:{type:'array',items:{type:'integer'},minItems:1,maxItems:10}},required:['ids'],additionalProperties:false}}},{type:'function',function:{name:'read_context',description:'Read original surrounding blocks for a hit already returned by search, including nearby definitions and payment reasons. Never summarize.',parameters:{type:'object',properties:{hitId:{type:'string'}},required:['hitId'],additionalProperties:false}}}];
@@ -75,6 +76,13 @@ export async function runInvestigation({document,request,products=[],nim,onEvent
   }
   ensure(finished,'AGENT_STEP_LIMIT',502);
  }
- signal?.throwIfAborted();onEvent('stage_completed',{stage:'verification',message:'약관 원문과 출처 위치를 확인했습니다.'});
- return assembleEvidence({hits:[...hits.values()],mappings:drug.mappings,references:reference.references,terms,mode:cloud?'nim-react':'local',truncated});
+ signal?.throwIfAborted();
+ onEvent('stage_started',{stage:'policy_scope',message:'관련 보장 항목과 지급사유·제외사항의 원문을 확인합니다.'});
+ const scope=await (dependencies.scope||inspectPolicyScope)({document,hits:[...hits.values()],terms,references:reference.references,signal});
+ const canonical=new Set(scope.hits.map(h=>h.id));
+ for(const [id,hit] of hits){if(!canonical.has(id)&&scope.hits.some(full=>full.documentHash===hit.documentHash&&full.page===hit.page&&full.start<=hit.start&&full.end>=hit.end))hits.delete(id);}
+ for(const hit of scope.hits)hits.set(hit.id,hit);
+ truncated ||=scope.coverage.truncated;
+ onEvent('stage_completed',{stage:'verification',message:'약관 원문과 출처 위치를 확인했습니다.'});
+ return assembleEvidence({hits:[...hits.values()],mappings:drug.mappings,references:reference.references,terms,mode:cloud?'nim-react':'local',truncated,coverage:scope.coverage});
 }

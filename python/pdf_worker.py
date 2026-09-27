@@ -1,5 +1,5 @@
 """Isolated PDF operations. Coordinates are recovered from original text-layer glyphs."""
-import base64, gzip, hashlib, json, math, struct, sys
+import base64, gzip, hashlib, json, math, re, struct, sys, unicodedata
 from pathlib import Path
 import pymupdf as fitz
 REC = struct.Struct('<II8d')
@@ -110,10 +110,85 @@ def context(doc, page, start, end=None, before=0, after=3, nextPage=False):
         selected.extend((following,a,b) for a,b in following['blocks'][:2])
     hits=[];characters=0;truncated=False
     for source,a,b in selected:
+        if not visible_text(source['text'][a:b]):continue
         if len(hits)>=8 or characters+b-a>12000:
             truncated=True;break
         hits.append(make_hit(doc,source,a,b));characters+=b-a
     return {'hits':hits,'truncated':truncated}
+
+def visible_text(text):
+    # Detection only. Never trim, normalize or rewrite a returned source span.
+    return any(not ch.isspace() and not unicodedata.category(ch).startswith('C') for ch in text)
+
+def heading_text(text):
+    return ''.join(ch for ch in text if not ch.isspace() and not unicodedata.category(ch).startswith('C'))
+
+def section_title(text):
+    t=heading_text(text)
+    return bool(re.match(r'^\d+(?:[-.]\d+)+',t) and ('특별약관' in t or '특약' in t) and len(t)<240 and not re.search(r'\.{3,}|…{2,}',t))
+
+def article_kind(text):
+    t=heading_text(text)
+    if not re.match(r'^제\d+조(?:의\d+)?[（(]',t):return None
+    # Clause headings may contain nested disease-name parentheses.
+    canonical=t.replace('（','(').replace('）',')');begin=canonical.find('(');depth=0;finish=len(canonical)
+    for i in range(begin,len(canonical)):
+        if canonical[i]=='(':depth+=1
+        elif canonical[i]==')':
+            depth-=1
+            if depth==0:finish=i+1;break
+    title=canonical[:finish]
+    if re.search(r'보험금(?:의)?지급사유|보험금을지급하는사유|보상하는손해',title):return 'payment'
+    if re.search(r'보험금을지급하지않는사유|보장하지않는손해|보상하지않는손해',title):return 'exclusion'
+    if '정의' in title or '진단확정' in title:return 'definition'
+    if re.search(r'보험금(?:의)?청구',title):return 'claim'
+    return 'other'
+
+def policy_sections(doc,anchors):
+    """Bounded source-only rider/article grouping. Unsupported layouts remain unresolved."""
+    require(type(anchors) is list and len(anchors)<=12,'INVALID_SECTION_ANCHORS')
+    for anchor in anchors:verify(doc,anchor)
+    flat=[(p,a,b) for p in doc['pages'] for a,b in p['blocks'] if visible_text(p['text'][a:b])]
+    titles=[i for i,(p,a,b) in enumerate(flat) if section_title(p['text'][a:b])]
+    selected=[]
+    for anchor in anchors:
+        pos=next((i for i,(p,a,b) in enumerate(flat) if p['number']==anchor['page'] and a<=anchor['start']<b),None)
+        candidates=[i for i in titles if pos is not None and i<=pos]
+        if not candidates:continue
+        owner=candidates[-1]
+        if anchor['page']-flat[owner][0]['number']>6:continue
+        if owner not in selected:selected.append(owner)
+    sections=[];truncated=len(selected)>4;characters=0
+    for owner in selected[:4]:
+        p,a,b=flat[owner];title=make_hit(doc,p,a,b)
+        end=next((i for i in titles if i>owner),len(flat))
+        articles=[];current=None;partial=False;used=0
+        for source,start,stop in flat[owner+1:end]:
+            if source['number']-p['number']>6 or used+stop-start>10000 or characters+stop-start>20000:
+                partial=True;truncated=True;break
+            kind=article_kind(source['text'][start:stop])
+            if kind is not None:
+                current={'kind':kind,'heading':make_hit(doc,source,start,stop),'hits':[]}
+                articles.append(current)
+            if current is not None and current['kind']!='other':
+                # Exclude recurring page furniture only; the extraction remains immutable.
+                text=source['text'][start:stop]
+                if re.match(r'^\d+\s*\n무배당',text):continue
+                h=make_hit(doc,source,start,stop);current['hits'].append(h)
+                used+=stop-start;characters+=stop-start
+        clauses=[x for x in articles if x['kind']!='other' and x['hits']]
+        # Keep each article contiguous within a page, including original whitespace.
+        # This avoids presenting table cells and sentence fragments as separate cards.
+        for clause in clauses:
+            merged=[]
+            for hit in clause['hits']:
+                if merged and merged[-1]['page']==hit['page']:
+                    prior=merged.pop();source=doc['pages'][hit['page']-1]
+                    merged.append(make_hit(doc,source,prior['start'],hit['end']))
+                else:merged.append(hit)
+            clause['hits']=merged;clause['heading']=merged[0]
+        if clauses:sections.append({'id':title['id'],'title':title,'clauses':clauses,'truncated':partial})
+    return {'sections':sections,'truncated':truncated}
 
 def verify(doc,hit):
     require(type(hit.get('page')) is int and 1<=hit['page']<=len(doc['pages']),'SOURCE_INTEGRITY')
@@ -157,6 +232,7 @@ def main(p):
     require(doc['hash']==digest(data),'SOURCE_INTEGRITY')
     if op=='text':return {'text':'\n'.join(x['text'] for x in doc['pages'])[:50000]}
     if op=='search':return search(doc,p['terms'],**({'pages':p['pages']} if 'pages' in p else {}))
+    if op=='sections':return policy_sections(doc,p['anchors'])
     if op=='context':return context(doc,p['page'],p['start'],p.get('end'),p.get('before',0),p.get('after',3),p.get('nextPage',False))
     if op=='annotate':
         # Re-extract from the original PDF so a modified index cannot forge coordinates.

@@ -83,7 +83,7 @@ async def register_local(config: InsureLensLocalConfig, builder: Builder):
             if len(stdout) > 8_000_000:
                 raise ValueError("WORKFLOW_OUTPUT_LIMIT")
             result = json.loads(stdout)
-            if not isinstance(result, dict) or set(result) != {"quotes", "mappings", "references", "terms", "notice", "mode", "truncated"}:
+            if not isinstance(result, dict) or set(result) != {"quotes", "mappings", "references", "terms", "notice", "mode", "truncated", "coverage"}:
                 raise ValueError("INVALID_WORKFLOW_RESULT")
             return json.dumps(result, ensure_ascii=False)
         finally:

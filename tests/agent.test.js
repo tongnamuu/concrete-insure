@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {understandInput,understandInputWithModel} from '../src/agents/input.js';
-import {runInvestigation} from '../src/agent.js';import {identifyDrugs} from '../src/agents/drug.js';
+import {runInvestigation as realInvestigation} from '../src/agent.js';import {identifyDrugs} from '../src/agents/drug.js';
 const hit={id:'1:0:2',page:1,start:0,end:2,sourceStart:0,sourceEnd:5,quote:'독감 원문',matchedText:'독감',segments:[{index:0,start:0,end:1,quad:[0,0,1,0,1,1,0,1]}],documentHash:'abc',offsetEncoding:'unicode-code-points'};
 const inputChat=async(messages)=>JSON.stringify({terms:understandInput(JSON.parse(messages.at(-1).content)).terms});
 const base={document:{pdf:'/trusted.pdf',index:'/trusted.json'},request:{query:'독감걸렸는데 관련 내용찾아줘',confirmedTerms:[],cloudConsent:true}};
@@ -29,3 +29,5 @@ test('no cloud consent means no input model call',async()=>{const out=await unde
 const finishAction=(args='{}')=>({finish_reason:'tool_calls',message:{role:'assistant',tool_calls:[{id:'finish1',type:'function',function:{name:'finish_retrieval',arguments:args}}]}});
 test('explicit finish tool ends native ReAct after verified retrieval',async()=>{let n=0;const nim={enabled:true,chat:inputChat,complete:async()=>[action(),finishAction()][n++]};const out=await runInvestigation({...base,nim},{retrieve});assert.equal(n,2);assert.deepEqual(out.quotes,[hit]);});
 test('finish tool rejects no-search and arbitrary completion content',async()=>{await assert.rejects(runInvestigation({...base,nim:{enabled:true,chat:inputChat,complete:async()=>finishAction()}},{retrieve}),/NIM_STOP_WITHOUT_SEARCH/);let n=0;await assert.rejects(runInvestigation({...base,nim:{enabled:true,chat:inputChat,complete:async()=>[action(),finishAction('{"answer":"eligible"}')][n++]}},{retrieve}),/INVALID_TOOL_ARGUMENTS/);});
+
+function runInvestigation(input,dependencies={}){return realInvestigation(input,{scope:async()=>({hits:[],coverage:{status:'unresolved',scope:'policy_benefit_only',items:[],truncated:false}}),...dependencies});}

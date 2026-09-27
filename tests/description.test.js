@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {querySchema} from '../src/core.js';
 import {understandInput,understandInputWithModel} from '../src/agents/input.js';
-import {runInvestigation} from '../src/agent.js';
+import {runInvestigation as realInvestigation} from '../src/agent.js';
 const description='  조카가 독감 진단을 받았고 조플루자를 처방받았어요.\n처방전은 없어요.  ';
 test('description replaces prescription and question; raw text is preserved',()=>{
  const parsed=querySchema.parse({description});assert.equal(parsed.query,'');assert.equal(parsed.description,description);assert.deepEqual(parsed.confirmedTerms,[]);
@@ -23,3 +23,5 @@ test('description-only investigation returns trusted original, not narrative or 
  const result=await runInvestigation({document:{pdf:'/trusted',index:'/trusted'},request:{description}}, {retrieve:async({terms,ids})=>({hits:ids.some(i=>terms[i]==='독감')?[source]:[],truncated:false}),context:async()=>({hits:[],truncated:false})});
  assert.deepEqual(result.quotes,[source]);assert.deepEqual(result.mappings,[]);assert(!('diagnosis' in result));assert(!('answer' in result));
 });
+
+function runInvestigation(input,dependencies={}){return realInvestigation(input,{scope:async()=>({hits:[],coverage:{status:'unresolved',scope:'policy_benefit_only',items:[],truncated:false}}),...dependencies});}

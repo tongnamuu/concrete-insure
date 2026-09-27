@@ -12,7 +12,8 @@
     "setup:pdf": "uv venv .venv && uv pip install --python .venv/bin/python -r requirements-pdf.txt",
     "skills:list": "npx skills@1.7.0 add . --list",
     "setup:nat": "uv venv integrations/nat/.venv --python 3.13 && uv pip install --python integrations/nat/.venv/bin/python -e integrations/nat",
-    "test:browser": "node scripts/browser-smoke.mjs"
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "test:browser:coverage": "node scripts/browser-coverage.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",
