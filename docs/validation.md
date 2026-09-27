@@ -58,7 +58,7 @@ SSE는 모델 대기 중 5초마다 `stage_progress`와 `elapsedSeconds`를 보�
 
 Python 전체 검사118개와20개 하위 검사를 통과했다. 신규 로그 검사8개는 파일 순환·0600 권한, 요청/작업 ID 연결, 성공·실패·취소·재시작, NIM 응답 토큰 수·시간 초과 및 입력/키 제외를 확인했다. SDK 로그 검사는 HTTP MockTransport를 사용했고 추가 사용자 자료의 외부 전송은 없다. Chromium 진행 검사에서 SSE 대기 갱신, 취소 후 결과 없음, 다음 검색 완료를 확인했다.
 
-실행 로그는 `.local-data/logs/insurelens.jsonl`에 저장하며 파일당5 MiB와 이전3개 파일로 제한한다. 로그 읽기와 이벤트 의미는 [logging.md](logging.md)에 있다. 앞으로의 코드 변경은 [AGENTS.md](../AGENTS.md)에 따라 작업 브랜치와 PR로 제공한다.
+실행 로그는 `.local-data/logs/insurelens.jsonl`에 저장하며 파일당5 MiB와 이전3개 파일로 제한한다. 로그의 기록·보관 기준은 [로깅 지침](logging.md)에 있다. 앞으로의 코드 변경은 [AGENTS.md](../AGENTS.md)에 따라 작업 브랜치와 PR로 제공한다.
 
 ## 공개 저장소 게시 전 점검과 진행 문구
 
