@@ -1,3 +1,0 @@
-workflow:
-  _type: insurelens_local
-  timeout_seconds: 600

@@ -1,101 +1,86 @@
 # InsureLens
 
-약관 PDF와 진료·처방 자료에서 **관련 원문과 위치를 찾아 보여 주는 웹 에이전트**입니다. 질병을 추정하거나 보험금 지급 여부를 판단하지 않습니다. 약관 요약·의역·모델 생성 인용문을 반환하지 않습니다. **약관에 보장 항목이 명시되어 있는지와 상표명 직접 기재 또는 성분 근거를 통한 간접 연결**을 표시하며, 실제 가입·지급 요건 충족 여부는 별도로 확인해야 합니다.
+보험약관 PDF와 사용자 설명·처방 자료에서 관련 보장 항목과 근거를 찾아 보여 주는 웹 에이전트입니다. 약관 문구는 원문 그대로 표시하고 PDF에 형광펜 주석으로 저장합니다. **약관에 명시된 보장 항목과 성분 근거를 통한 연결**을 표시하며, 실제 가입·진단·처방·지급 조건 충족 여부는 별도 확인 대상으로 둡니다. 보험금 지급 여부나 질병을 추정하지 않습니다.
 
-Node.js 웹/API + 모듈별 서브에이전트 + 실제 Python NeMo Agent Toolkit 워크플로 + NVIDIA NIM 연결입니다. PDF의 문자 좌표와 표준 주석은 PyMuPDF 보조 프로세스가 처리합니다. 사용자 접점은 웹 하나이며 NemoClaw는 포함하지 않습니다.
+백엔드는 **Python FastAPI + NeMo Microservices Python SDK + NVIDIA NeMo Agent Toolkit(NAT)** 입니다. JavaScript는 PDF.js 웹 화면과 브라우저 검사에 사용합니다. Node.js 서버나 Node로 돌아가는 에이전트는 없습니다. 사용자 접점은 웹이며 NemoClaw와 파인튜닝은 포함하지 않습니다.
 
 ## 실행
 
-필요 환경: Node.js22.13이상(검증24), npm, [uv](https://docs.astral.sh/uv/), Python3.12또는3.13. 로컬 원문 탐색은 GPU/API키 없이 작동합니다.
+Python 3.12 또는 3.13, [uv](https://docs.astral.sh/uv/), Node.js 22.13 이상이 필요합니다. Node/npm은 PDF.js 정적 파일 설치와 브라우저 검사 도구용입니다.
 
 ```sh
+uv sync --extra nat --extra dev
 npm ci
-npm run setup:pdf
-npm run setup:nat
-cp .env.example .env
-npm start
+# 처음 설치한 경우에만 .env.example을 .env로 복사합니다.
+# 기존 .env가 있으면 그대로 사용합니다.
+uv run --extra nat insure-lens
 ```
 
-브라우저: http://127.0.0.1:8000
+브라우저에서 http://127.0.0.1:8000 을 엽니다. 기존 `npm start`도 Python 서버를 실행하도록 연결했습니다. 한 프로젝트의 데이터 디렉터리에는 서버를 하나만 실행하세요.
 
-새 프로젝트의 `.env`에 키를 직접 입력하세요. `NVIDIA_API_KEY`가 비어 있으면 로컬 탐색 모드라고 표시합니다. 원문 탐색과 PDF 저장은 이 상태에서도 작동합니다. 키를 넣으면 Nemotron native tool-calling ReAct를 사용합니다. 기본 모델은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 서비스 오류·시간 초과·잘못된 응답은 화면에 알리고 검증된 로컬 근거로 복구합니다. 이 결과는 모델 추론으로 표시하지 않습니다. 외부 모델에 질의·발췌문을 보내기 전 웹 동의란을 체크해야 합니다.
+`.env`의 `NVIDIA_API_KEY`만 설정하면 기본 Nemotron 모델을 사용할 수 있습니다. 기본값은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 키가 없으면 화면에 표시되는 로컬 근거 탐색 모드로 작동합니다. 외부 모델로 입력·약관 발췌문을 전송하기 전에 웹의 전송 동의가 필요합니다. 제공자 시간 초과나 잘못된 도구 응답은 알림 후 로컬에서 새로 조사하며 결과에 실제 실행 모드를 표시합니다.
 
-| 설정 | 사용 기능 |
+| 선택 설정 | 필요한 경우 |
 |---|---|
-| NVIDIA_API_KEY / NIM_MODEL / NIM_BASE_URL | Nemotron 추론·ReAct |
-| NIM_OCR_URL | 한국어 지원 multilingual OCR endpoint. 비어 있으면 이미지 OCR 비활성 |
-| MFDS_API_KEY | 별도 공식 제품 조회에 필요한 공공데이터포털의 의약품 제품 허가정보 API **v08** 구독 키, 디코딩 형태 |
-| TRANSLATION_MODEL | 선택적 영어 gloss 모델. 원문 검색 문자열·인용은 변경하지 않음 |
-| AGENT_RUNNER=auto | NAT가 설치되어 있으면 native workflow 사용, 없으면 Node harness. nat로 지정하면 미설치 시 오류 |
+| `NIM_BASE_URL`, `NIM_MODEL` | 기본 hosted NIM endpoint 또는 모델 변경 |
+| `NEMO_MICROSERVICES_BASE_URL` | 별도로 배포한 NeMo 플랫폼 주소. 일반 hosted NIM 추론에는 입력할 필요 없음 |
+| `NIM_OCR_URL` | 이미지·스캔 처방전 OCR. 실제 사용 가능한 한국어 지원 endpoint 필요 |
+| `MFDS_API_KEY` | 공공데이터포털 의약품 제품 허가정보 v08 실시간 조회용 디코딩 키 |
+| `TRANSLATION_MODEL` | 별도 경량 모델의 참고용 영어 표현. 원문·검색어·인용문은 변경하지 않음 |
+| `AGENT_RUNNER=auto` | 설치된 NAT 사용. `nat`는 NAT 필수, `direct`는 Python 직접 실행 |
 
-NIM용 GPU 서버의 `/v1/ocr`와 build.nvidia.com hosted OCR URL은 제공 형태가 다릅니다. `.env.example`의 안내와 공식 API 문서를 확인해 계정에서 실제 사용할 수 있는 multilingual endpoint를 지정하세요. OCR모델명을 적는 것만으로 서비스가 배포되지는 않습니다. 키 없는 테스트를 실제 NIM/OCR 호출 성공으로 표시하지 않습니다.
+NeMo Microservices SDK는 서비스에 접속하는 클라이언트입니다. SDK 설치만으로 Guardrails·Evaluator·Customizer 서비스가 배포되지는 않습니다. 현재 SDK로 실행하는 기능은 **NIM 추론**이며, 별도 NeMo Guardrails Microservice를 사용했다고 표시하지 않습니다. 원문·검색어·좌표 검증은 애플리케이션에서 항상 수행합니다.
 
-## 사용 방법
+## 사용 흐름
 
-1. 오른쪽에 볼 보험약관 PDF를 업로드합니다. 샘플 PDF 없이 본인 파일로 동작합니다.
-2. **처방 자료 대신 설명하기**에 “조카가 독감 진단을 받고 조플루자를 처방받았어요. 처방전은 없어요”처럼 상황을 적고 **이 설명으로 원문 찾기**를 누릅니다. 사진이나 별도의 질문은 필요하지 않습니다. 추가 질문을 적으면 설명과 함께 사용합니다. 입력한 설명은 수정 없이 별도 `description` 필드로 전달하며, 사용자 진술로 표시하고 문서로 확인된 진단으로 취급하지 않습니다. 설명을 지우면 다음 검색부터 제외됩니다.
-3. 필요하면 처방전/약봉투의 PNG·JPEG 또는 처방 PDF를 올립니다. OCR초안과 자동으로 채워진 후보를 원본과 비교해 약품명·성분명·질병코드를 확인합니다. 확인 버튼을 누르기 전에는 검색에 반영되지 않습니다. 자동으로 질병을 추가하지 않습니다.
-4. 조플루자·타미플루는 설명에 상표명만 적어도 출처가 등록된 제조사 제품자료에서 성분·관련 표현을 연결하고 약관 원문을 찾습니다. 제품자료와 약관 인용을 별도로 표시합니다. 이 참고 자료는 실시간 식약처 허가 조회, 실제 처방 제품 선택, 진단 확인 또는 지급 판단이 아닙니다. 다른 제품은 사진이 없어도 알고 있는 상표명을 공식 의약품 조회에 직접 입력할 수 있습니다. 제품을 찾고 함량·제형·제조원을 확인해 선택합니다. 선택된 공식 주성분 문자열을 그대로 표시하고 약관 검색에 사용합니다.
-5. **보장 범위 확인**에서 관련 특약과 연결 경로를 확인합니다. 지급사유·정의·지급 제외·청구서류를 원문 그대로 펼쳐 볼 수 있습니다. 실제 가입 여부, 진단·처방 목적, 횟수·한도, 당시 허가사항과 참조 조항은 추가 확인 대상으로 표시합니다. 원문 카드의 위치 버튼으로 해당 페이지를 봅니다. 원문 구간과 문자별 하이라이트를 표시하며, 표시된 PDF를 저장하면 네이티브 Highlight주석과 원문 Contents가 포함됩니다.
-6. 새로고침하면 약관은 유지하고 완료된 검색 결과·하이라이트는 초기화합니다. 진행 중인 작업은 계속 상태를 받습니다. **검색 결과 지우기**는 현재 대화·검색 결과와 하이라이트만 비우며, 입력 내용·업로드한 자료·서버 기록은 유지합니다. **자료 삭제**는 문서와 결과 기록을 모두 지웁니다.
+1. 보험약관 PDF를 업로드합니다. 샘플 자료 없이 본인 파일로 동작합니다.
+2. 질문이나 **처방 자료 대신 설명하기**에 상황을 입력합니다. 설명만 있어도 진행하며, 사용자 진술을 확인된 진단으로 취급하지 않습니다.
+3. 처방전·약봉투 이미지 또는 처방 PDF가 있다면 선택적으로 업로드합니다. 추출 후보는 사용자가 확인한 뒤 적용됩니다. 텍스트가 있는 처방 PDF는 로컬에서 읽고, 이미지·스캔은 OCR 설정과 전송 동의가 필요합니다.
+4. 조플루자·타미플루는 출처가 등록된 제조사 자료를 통해 성분과 약관 표현을 연결합니다. 이 자료는 **날짜가 명시된 정적 참고 자료**이며 실시간 식약처 조회나 진단 당시 허가 인증이 아닙니다. 다른 약품은 식약처 조회 설정 후 정확한 제품을 직접 선택합니다.
+5. 관련 특약·지급사유·정의·제외사항·청구서류를 원문으로 확인합니다. 위치 버튼으로 PDF를 이동하고, 표시된 PDF를 저장하면 표준 Highlight 주석이 포함됩니다.
+6. 새로고침하면 약관은 유지하고 완료된 결과는 초기화합니다. 진행 중 작업은 SSE로 다시 연결됩니다. **검색 결과 지우기**는 표시만 지우며, **자료 삭제**는 원본과 저장된 결과를 삭제합니다.
 
-약관에 약 이름이 없거나 조회 결과가 없다는 이유로 보장 제외라고 출력하지 않습니다. 약품의 성분 이름에 염(salt)이 포함되면 이를 임의 삭제해 동일 성분이라고 주장하지 않습니다. 질병코드 설명은 공식 용어 사전 없이 모델 기억으로 생성하지 않습니다.
+검색 실패나 약 이름의 부재를 보장 제외로 해석하지 않습니다. 성분의 염·제형을 임의로 통합하거나 약품에서 질병을 추정하지 않습니다.
 
-## 모듈 규약과 ReAct
+## 모듈과 실행 규약
 
-먼저 [contracts.md](docs/contracts.md)에 입출력을 정하고 모듈별로 구현했습니다. [architecture.md](docs/architecture.md)에 책임·공식 근거·제약이 있습니다.
+입출력은 [contracts.md](docs/contracts.md), 책임은 [module-definition.md](docs/module-definition.md)에 정의합니다.
 
-- `src/agents/input.js`: 명시된 원문 검색 요소만 추출.
-- `src/agents/prescription.js`: 문서에 명시된 후보만 추출하고 사용자 확인 대기.
-- `src/agents/drug.js`: 선택된 공식 제품 정보만 사용.
-- `src/agents/drug-references.js`, `data/drug-references.json`: 출처·자료 날짜·원문이 있는 제품 참고 자료를 검증하고 약관 검색 표현에 연결. 현재 조플루자·타미플루만 등록.
-- `src/agents/retrieval.js`: 확인된 검색어 ID → PDF 원문 구간.
-- `src/agents/policy-scope.js`: 지급사유 원문과 상표명·성분 연결 근거를 대조해 보장 항목의 존재를 표시. 실제 지급 판단이나 환자 상태 추정은 하지 않음.
-- `src/agents/verification.js`: 원문·좌표 계약 검사 및 응답 조립.
-- `src/agent.js`: ReAct supervisor. `tool_calls → 실행 → tool observation → 재호출`, 최대8단계. 모델의 자유문 최종 답변은 버립니다.
-- `src/pdf.js`, `python/pdf_worker.py`: 격리된 PDF 추출·검색·주변 원문·주석 도구.
-- `src/providers.js`: NIM·OCR·식약처 공식 API 어댑터.
-- `src/store.js`, `src/server.js`: 소유권·파일·SQLite·작업 큐·SSE.
-- `src/nat.js`, `integrations/nat`: 실제 NAT 등록 workflow로 Node 서브에이전트를 실행. NAT의 일반 내장 ReAct 에이전트를 쓴다고 주장하지 않습니다.
-- `public/`: 1:1 split PDF.js 웹 UI.
+| Python 모듈 | 책임 |
+|---|---|
+| `insurelens/server.py`, `store.py` | 업로드·소유권·SQLite·작업 취소·재연결 가능한 SSE |
+| `providers.py` | 실제 `AsyncNeMoMicroservices` SDK 추론, OCR, 식약처 조회 |
+| `nat.py` | 등록된 NAT workflow에서 Python 에이전트를 직접 실행 |
+| `agent.py`, `agents/` | 명시 정보 추출 → 제품 근거 → ReAct 검색/문맥 → 보장 항목 연결 → 원문 검증 |
+| `pdf.py`, `python/pdf_worker.py` | 제한 시간·취소가 있는 별도 프로세스, 문자 좌표 추적, 원문 검증, 표준 주석 |
+| `skills_cli.py`, `skills/` | 세 도구의 JSON 입출력 CLI와 skills.sh 호환 지침 |
+| `public/` | 1:1 split PDF.js 화면 |
 
-NAT 안에 custom workflow를 등록하고 그 workflow가 Node harness를 실행합니다. 모델이 없어도 native NAT 런타임 자체는 테스트할 수 있습니다. 숨겨진 추론문 대신 단계 이름과 완료 상태만 SSE로 전달합니다.
+ReAct의 모델 출력은 허용된 도구와 ID를 고르는 데만 사용합니다. 자유롭게 생성한 최종 답변은 폐기하고, 애플리케이션이 PDF의 source span을 직접 반환합니다. 번역은 참고용 표현이며 검색·인용의 원문을 대체하지 않습니다. 원문 계산·주석 같은 결정적인 작업에는 모델을 사용하지 않습니다.
 
-## Skills / 보안 실행
+## 스킬과 테스트
 
-`skills/insure-lens-source/SKILL.md`는 skills.sh 호환이며 실제 supervisor의 신뢰된 지침으로 읽습니다.
+웹과 CLI는 같은 Python 모듈을 호출합니다. 웹이 매번 별도 CLI 프로세스를 실행하는 구조는 아닙니다. 세 스킬은 `ocr-prescription`, `drug-ingredient-resolver`, `pdf-iso32000-annotator`이며 각 `SKILL.md`에 JSON 입출력과 사용법이 있습니다. 상위 원문 규칙은 `insure-lens-source`입니다.
 
 ```sh
+uv run --extra nat --extra dev pytest -q
+npm run test:browser
+npm run test:browser:coverage
 npx skills@1.7.0 add . --list
-# 원하는 호환 agent에 설치할 때만:
-npx skills@1.7.0 add . --skill insure-lens-source
-# SkillSpector 별도 설치 후 정적 검사:
+# SkillSpector를 별도 설치한 경우:
 sh scripts/scan-skills.sh
 ```
 
-[OpenShell 배포 경계](integrations/openshell/README.md)는 서버 도구 격리용입니다. 로컬 실행이 자동으로 OpenShell에 격리되는 것은 아닙니다. NemoClaw는 사용하지 않습니다. `build.nvidia.com Skill API`라는 범용 실행 계약은 확인하지 못해 임의 API를 만들지 않았습니다. 대신 공식 NIM endpoint와 NVIDIA Agent Skills 배포 형식을 사용합니다. 파인튜닝은 없습니다.
+브라우저 검사는 자체 임시 저장소와 합성 PDF를 사용합니다. 시스템 Chromium을 쓰려면 `BROWSER_EXECUTABLE`을 지정하세요. 없으면 `npx playwright install chromium`으로 설치합니다. [검증 기록](docs/validation.md)에 실제 실행 결과와 미검증 기능을 구분합니다.
 
-## 검증
+## 지원 범위
 
-```sh
-npm test
-integrations/nat/.venv/bin/python integrations/nat/test_bridge.py
-BROWSER_EXECUTABLE='/path/to/chromium' node scripts/browser-smoke.mjs
-# 별도 임시 서버/합성 자료를 쓰는 보장 항목 화면 검증:
-BROWSER_EXECUTABLE='/path/to/chromium' npm run test:browser:coverage
-```
+- 약관: 20MiB·1000쪽·200만 문자. 원문을 보장하기 위해 텍스트 레이어 없는 약관은 거절합니다. 처방 자료는 8MiB·8쪽, 이미지 2500만 픽셀까지입니다.
+- PDF 작업은 기본 120초이며 취소 시 프로세스를 종료합니다. 긴 요청은 작업 ID를 반환하고 SSE로 완료를 알립니다.
+- `.local-data`에 기존과 호환되는 SQLite·원본·인덱스를 보관합니다. 재시작하면 완료된 기록은 유지하고 중단된 작업은 `SERVER_RESTARTED`로 표시합니다.
+- 로컬 단일 사용자 데모입니다. 서비스 배포용 계정 인증·암호화·보관 기한·분산 큐는 별도입니다.
+- 원문은 PDF text layer에서 추출한 동일 Unicode 구간이며 추출 줄바꿈을 포함합니다. 전체 약관의 모든 관련 문구를 찾았다는 보장은 하지 않습니다. 지원하지 않는 조항 형식은 미확인 상태로 남습니다.
+- ISO 32000의 Highlight/QuadPoints/Contents/AP 주석을 사용합니다. 전체 표준 적합성 인증을 의미하지 않으며 원본은 보존합니다. PyMuPDF는 AGPL/상용 이중 라이선스입니다.
+- [OpenShell](integrations/openshell/README.md)은 선택적 정책 예제만 제공하며 현재 실행 환경에 적용됐다고 주장하지 않습니다. 범용 `build.nvidia.com Skill API`는 확인된 규약이 없어 임의로 만들지 않았습니다.
 
-테스트는 PDF를 메모리/임시 폴더에서 생성합니다. 실제 보험약관이나 처방전을 코드에 포함하지 않습니다. [검증 기록](docs/validation.md)을 참고하세요.
-
-## 데이터와 지원 범위
-
-- 기본 localhost 전용. HttpOnly/SameSite 세션, Host/Origin검사, 변경 요청 헤더, strict request schema 적용.
-- 약관20MiB/1000쪽/200만문자, 처방8MiB/8쪽, 이미지2500만픽셀. 텍스트 레이어 없는 약관은 verbatim 보장을 위해 거절하고 처방 스캔만 OCR합니다.
-- PDF작업 기본120초. 디스크 SQLite와 원본/인덱스는 `.local-data`에 보관합니다. 삭제 전까지 보관하며, 단말 OS보안에 의존합니다. 운영 서비스용 사용자 인증·암호화·보관기한 관리와 분산큐는 별도입니다.
-- 중단된 작업은 재시작 후 SERVER_RESTARTED로 명시하고 재시도해야 합니다. 완료 결과와 SSE이벤트는 유지됩니다.
-- 추출 읽기 순서는 PDF text layer 기준이며 합성 줄바꿈을 포함합니다. 원문은 그 저장된 text의 동일 구간입니다. PDFbinary byte offset과는 다릅니다.
-- 원문 주변 블록은 문맥을 보여 주지만 모든 약관의 법적 조항 경계를 완벽하게 인식하지는 않습니다. 전체 약관의 모든 관련 구절을 찾았다는 보장을 하지 않습니다.
-- 표준 Highlight/QuadPoints/AP/Contents를 사용하고 회전/CropBox를 테스트했습니다. ISO32000 전체 적합성 인증 제품은 아닙니다. 원본은 보존하며 수정 사본은 전자서명을 무효화할 수 있습니다.
-- PyMuPDF는 AGPL/상용 이중 라이선스입니다. 배포 방식에 맞는 라이선스를 검토해야 합니다. 저장소 자체 라이선스가 의존성 라이선스를 대체하지 않습니다.
-
-보장 항목 묶기는 현재 번호가 붙은 특별약관 제목과 `제N조 (...)` 형식을 인식합니다. 인식할 수 없는 서식, 제목만 있는 검색 결과, 불충분하거나 부정 문구가 있는 연결 근거는 보장 항목으로 확정 표시하지 않습니다. 별표·보통약관 전체 참조를 자동으로 검토했다고 주장하지 않습니다. 공백/제어문자만 있는 블록은 제외하고 유효한 원문의 공백·줄바꿈은 보존합니다. 이 기능은 일반 코드 모듈이며, 세 개의 Python CLI Skill로 분리된 구현은 아직 아닙니다.
+NVIDIA 연결과 공식 출처는 [nvidia-stack.md](docs/nvidia-stack.md)를 참고하세요.

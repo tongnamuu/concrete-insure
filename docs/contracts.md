@@ -1,10 +1,10 @@
-# InsureLens contracts v1
+# InsureLens contracts v2 (Python runtime, compatible HTTP schema)
 
-Latest requirements: Node.js web/API, no diagnosis inference, no insurance eligibility/claim recommendation, no policy paraphrase or summary. Nemotron output is control data only. Human-readable policy quotes are assembled by application code from PDF source spans. NVIDIA credentials are read only by the runtime from the user-configured .env; never log or package them. Web only; NemoClaw excluded per prior explicit decision. OpenShell optional sandbox integration. No finetuning.
+Runtime: Python FastAPI web/API, no diagnosis inference, no insurance eligibility/claim recommendation, no policy paraphrase or summary. Nemotron output is control data only. Human-readable policy quotes are assembled by application code from PDF source spans. NVIDIA credentials are read only by the runtime from the user-configured .env; never log or package them. Web only; NemoClaw excluded per prior explicit decision. OpenShell optional sandbox integration. No finetuning.
 
 ## Shared core
 
-`src/core.js`: AppError(code,status), ensure, querySchema, literalTerms(query,confirmedTerms), groundedTerms(raw,query,confirmedTerms,description), NOTICE. All public request schemas strict. Offset encoding is Unicode code points, not JS UTF-16. Use Array.from(text) for slicing in JS. The request must contain non-whitespace query or description. Description is an unchanged user statement, never OCR evidence or a verified diagnosis. Term grounding validates each input field separately to prevent cross-field fabricated substrings.
+`insurelens/core.py`: AppError(code,status), ensure, QueryRequest, literal_terms(query,confirmed), grounded_terms(raw,query,confirmed,description), NOTICE. All public request schemas strict. Offset encoding is Unicode code points, not JS UTF-16. Python string offsets use code points directly; browser code must use Array.from(text) when slicing source offsets. The request must contain non-whitespace query or description. Description is an unchanged user statement, never OCR evidence or a verified diagnosis. Term grounding validates each input field separately to prevent cross-field fabricated substrings.
 
 Request: `{query:string(0..2000,default:""),description:string(0..4000,default:""),confirmedTerms:string[](<=20,1..120),drugIds:string[](<=5,numeric MFDS IDs),cloudConsent:boolean,translation:boolean}`.
 Prescription images/PDFs are optional. An investigation requires a policy PDF and a non-empty user query or description; it must not require an OCR job, confirmedTerms, or selected products. User-entered facts remain user assertions, not verified diagnoses.
@@ -15,7 +15,7 @@ SourceHit: `{id:'page:start:end',page:1-based,start,end,sourceStart,sourceEnd,qu
 
 ## PDF worker
 
-`src/pdf.js` exports `pdfOperation(payload,{timeout=120000,python,signal}={}) -> Promise<value>`.
+`insurelens/pdf.py` exports `await pdf_operation(payload, timeout=120, python=None) -> dict`. Timeout is in seconds. asyncio task cancellation kills and reaps the worker.
 Input operations: index `{op:'index',pdf:absolute,index:absolute}` -> `{hash,pages,characters,textPages}`;
 search `{op:'search',pdf,index,terms:string[],pages?:number[]}` -> `{hits:SourceHit[],truncated:boolean}`;
 text `{op:'text',pdf,index}` -> `{text:string}` for prescription text PDFs;
@@ -26,15 +26,15 @@ Paths are server-owned, never supplied by public clients. Original hash/source/c
 
 ## Providers
 
-`Nvidia` in providers.js: `.enabled`, `.chat(messages,{model,signal}) -> string`, `.complete(messages,{tools,signal}) -> {finish_reason,message}`; `.ocr(buffer,signal)->{text,regions,requiresConfirmation:true}`; `.gloss(terms,signal)->[{id,original,english}]`. Original immutable; translated gloss never searched or quoted.
+`Nvidia` in insurelens/providers.py: `.enabled`, `.ocr_enabled`, `await chat(messages,model=None) -> str`, `await complete(messages,tools) -> {finish_reason,message}`; `await ocr(buffer,mime=None)->{text,regions,requiresConfirmation:true}`; `await gloss(terms)->[{id,original,english}]`. Original immutable; translated gloss never searched or quoted.
 `Drugs.lookup(name)->{products:[{id,name,ingredients,manufacturer,permitDate,cancelDate,url,retrievedAt}],total,requiresSelection:true,source}`.
 
 ## Investigation subagents
 
-`src/agent.js`: export `runInvestigation({document:{id,pdf,index},request,products:Product[],nim,onEvent:(event,data)=>void,signal}) -> Promise<Result>`.
+`insurelens/agent.py`: `await run_investigation(document=..., request=..., products=..., nim=..., emit=callback, operation=pdf_operation) -> Result`. emit(event,data) is synchronous. asyncio cancellation propagates across all awaits; public result keys retain camelCase.
 Core Result strict shape `{quotes:SourceHit[],mappings:Product[],references:DrugReference[],terms:string[],notice:string,mode:'nim-react'|'local',truncated:boolean,coverage:PolicyScope}`. The web adapter may add `warnings:string[]` only for explicitly labelled local recovery from provider/control-protocol errors. No free LLM final answer. Server renders only this result. Fail closed on injected actions or unsupported tools. Model may choose IDs from grounded terms only, not arbitrary search strings. Refuse response length/content_filter/unknown tool/invalid IDs. Step limit, repeated-call limits, cancellation.
 Subagent boundaries: input understanding (verbatim facts only), drug identity (verified official data only), policy retrieval (source hits), source verification/output assembly. ReAct observe-tool-result loop at orchestrator and/or retrieval; deterministic modules are tools. Short event summaries, no hidden chain-of-thought streaming. Local mode without credentials is explicitly deterministic, not claimed as model inference.
-NAT Python plugin in integrations/nat registers the native workflow. The workflow invokes the Node agent harness through a bounded subprocess protocol. src/nat.js adapts progress and cancellation to the web job queue. Native tool selection is implemented by the Node ReAct supervisor, not by NAT’s generic built-in ReAct agent.
+The root package registers insurelens.nat with nat.components. NAT invokes the Python agent in-process. Paths, provider objects and SSE callbacks stay in ContextVar; only an opaque token crosses the NAT function schema. The application implements the bounded ReAct loop inside the registered workflow.
 
 ## Web API
 
@@ -53,7 +53,7 @@ UI: 1:1 split, left chat/upload/OCR confirmation/drug candidate selection, right
 
 ## Sourced product-reference bridge
 
-`resolveDrugReferences({query,description,confirmedTerms,products})` returns `{references,specificTerms,contextTerms}` from the reviewed, dated data/drug-references.json catalog. Exact brand mentions only. Each added term is a substring of a cited manufacturer source excerpt. These are product facts, never patient diagnoses, selected dosage/forms, live MFDS checks or eligibility decisions. Current catalog scope is Xofluza/Tamiflu; unknown brands still require official lookup.
+`resolve_drug_references(query, description, confirmed_terms, products)` returns `{references,specificTerms,contextTerms}` from the reviewed, dated data/drug-references.json catalog. Exact brand mentions only. Each added term is a substring of a cited manufacturer source excerpt. These are product facts, never patient diagnoses, selected dosage/forms, live MFDS checks or eligibility decisions. Current catalog scope is Xofluza/Tamiflu; unknown brands still require official lookup.
 
 Result adds `references:ProductReference[]` (empty when unavailable). A reference has id,brand,aliases,scope:'product_reference',source:{publisher,url,landingUrl?,documentDate,checkedAt,type},facts:[{kind,label,quote,page,terms,priority:'specific'|'context'}]. Reference objects must match trusted application records exactly. User/LLM supplied reference objects are not accepted.
 

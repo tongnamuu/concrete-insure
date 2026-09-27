@@ -1,5 +1,5 @@
 # Deployment template for a Linux image with the application at /app.
-# Not automatically activated by npm start; validate with installed OpenShell version.
+# Not automatically activated by insure-lens; validate with installed OpenShell version.
 version: 1
 filesystem_policy:
   include_workdir: false
@@ -22,7 +22,7 @@ network_policies:
               method: POST
               path: /v1/chat/completions
     binaries:
-      - path: /usr/local/bin/node
+      - path: /app/.venv/bin/python
   nvidia_ocr:
     endpoints:
       - host: ai.api.nvidia.com
@@ -34,7 +34,7 @@ network_policies:
               method: POST
               path: /v1/cv/nvidia/nemotron-ocr-v2
     binaries:
-      - path: /usr/local/bin/node
+      - path: /app/.venv/bin/python
   mfds:
     endpoints:
       - host: apis.data.go.kr
@@ -46,4 +46,4 @@ network_policies:
               method: GET
               path: /1471000/DrugPrdtPrmsnInfoService08/getDrugPrdtPrmsnInq08
     binaries:
-      - path: /usr/local/bin/node
+      - path: /app/.venv/bin/python

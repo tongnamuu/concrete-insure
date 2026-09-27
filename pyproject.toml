@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "insure-lens"
+version = "0.2.0"
+description = "Source-grounded insurance evidence using Python, NeMo Microservices SDK and NAT"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi==0.141.1", "uvicorn==0.54.0", "python-multipart==0.0.32",
+  "pydantic==2.13.5", "httpx==0.28.1", "python-dotenv==1.2.3",
+  "nemo-microservices==1.5.0", "Pillow==12.3.0", "PyMuPDF==1.28.2",
+]
+
+[project.optional-dependencies]
+nat = ["nvidia-nat==1.9.0", "packaging>=24", "langchain-core>=1,<2"]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+
+[project.scripts]
+insure-lens = "insurelens.server:main"
+insurelens-skill = "insurelens.skills_cli:main"
+
+[project.entry-points.'nat.components']
+insurelens = "insurelens.nat"
+
+[tool.setuptools.packages.find]
+include = ["insurelens*"]
+
+[tool.setuptools.package-data]
+insurelens = ["nat-workflow.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

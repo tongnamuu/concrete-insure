@@ -1,27 +1,27 @@
 # InsureLens architecture and boundaries
 
-The final user specification supersedes the earlier claim-screening proposal: no eligibility decision, no claim recommendation, no diagnosis inference, no paraphrase or summary of policy. Latest language request is Node.js; a Python PDF subprocess is used for exact text-layer glyph geometry and standards-based annotation. Native NAT is a Python integration, not a fictitious JS package. NemoClaw remains excluded; web is the only user-facing interface.
+The final user specification supersedes the earlier claim-screening proposal: no eligibility decision, no claim recommendation, no diagnosis inference, no paraphrase or summary of policy. The backend uses Python FastAPI, the NeMo Microservices Python SDK and native in-process NAT. A separate Python PDF process provides cancellable text-layer geometry and annotation work. JavaScript is confined to the browser and browser tests. NemoClaw remains excluded; web is the only user-facing interface.
 
 ## Runtime modules
 
 | Module | Implementation | Input/output contract |
 |---|---|---|
-| Intake and job API | src/server.js,src/store.js | Authenticated case-scoped uploads and jobs, replayable SSE |
-| Document worker | src/pdf.js,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
+| Intake and job API | insurelens/server.py,insurelens/store.py | Authenticated case-scoped uploads and jobs, replayable SSE |
+| Document worker | insurelens/pdf.py,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
 | Prescription reading | Nvidia.ocr, PDF text/render tools | Image or prescription PDF → draft text requiring confirmation |
-| Input subagent | src/agents/input.js | User query/situation description/confirmed text → literal terms |
-| Drug identity subagent | src/agents/drug.js,Drugs.lookup | User-selected official product → unchanged ingredient fields |
-| Product reference resolver | src/agents/drug-references.js,data/drug-references.json | Explicit brand → cited manufacturer facts → grounded retrieval terms; never a clinical fact |
-| Policy retrieval subagent | src/agents/retrieval.js | Grounded term IDs or known source IDs → original spans |
-| ReAct supervisor | src/agent.js | NIM native tool calls → tools → observations → next turn |
-| Evidence assembly | src/agents/verification.js | Trusted source objects → structured result; no prose generation |
+| Input subagent | insurelens/agents/input.py | User query/situation description/confirmed text → literal terms |
+| Drug identity subagent | insurelens/agents/drug.py,Drugs.lookup | User-selected official product → unchanged ingredient fields |
+| Product reference resolver | insurelens/agents/drug_references.py,data/drug-references.json | Explicit brand → cited manufacturer facts → grounded retrieval terms; never a clinical fact |
+| Policy retrieval subagent | insurelens/agents/retrieval.py | Grounded term IDs or known source IDs → original spans |
+| ReAct supervisor | insurelens/agent.py | NIM native tool calls → tools → observations → next turn |
+| Evidence assembly | insurelens/agents/verification.py | Trusted source objects → structured result; no prose generation |
 | Web viewer | public/ | 1:1 split, uploads, explicit confirmation, source cards, PDF text-layer highlights |
 
 See contracts.md for exact fields. A prescription can be replaced by a free-text description (up to4,000characters). Description-only requests are valid. The description remains a separate, unchanged user statement and is never labelled as a verified clinical record. Exact-substring grounding covers query and description separately. Deterministic subagents deliberately do not make needless model calls. Each has a single responsibility and testable boundary. ReAct is applied where an observation changes the next retrieval action, not to calculation of coordinates or source slices.
 
 ## Provider connections
 
-Nemotron/NIM: OpenAI-compatible chat completions using native tool_calls and finish_reason. No key means explicitly labelled deterministic local mode. Never substitute fabricated cloud results. Hosted OCR uses its distinct documented input/image_url schema, not chat-completions messages. Configure the actual multilingual OCR endpoint after verifying account/model access. Hosted JSON extraction and native tool calls have been tested with a real key using public/synthetic data. See validation.md for full workflow results and limitations. No actual user medical document was used in cloud testing.
+Nemotron/NIM: AsyncNeMoMicroservices.chat.completions.create using native tool_calls and finish_reason. The official SDK1.5.0 handles inference requests; NAT1.9.0 directly invokes Python modules using a task-local invocation token. No key means explicitly labelled deterministic local mode. Never substitute fabricated cloud results. Hosted OCR uses its distinct documented input/image_url schema, not chat-completions messages. Configure the actual multilingual OCR endpoint after verifying account/model access. Hosted JSON extraction and native tool calls have been tested with a real key using public/synthetic data. See validation.md for full workflow results and limitations. No actual user medical document was used in cloud testing.
 
 MFDS: official DrugPrdtPrmsnInfoService08/getDrugPrdtPrmsnInq08. The public Swagger on data.go.kr as retrieved2026-09-27 names this v08 endpoint. Decoder preserves ITEM_INGR_NAME; no unsourced salt removal, brand alias or code-to-disease conversion. Product selection is explicit. Main-ingredient string equality or a quote match is never labelled medically/contractually suitable. Disease codes are searched literally; no KCD meanings are invented.
 
@@ -62,4 +62,4 @@ The supervisor exposes an empty-argument finish_retrieval tool so native callers
 
 ## Policy benefit and source grouping
 
-The application can identify an expressly described benefit and distinguish direct wording from an indirect ingredient link. `policy-scope.js` reads grouped source articles after retrieval and returns source IDs, fixed connection labels and pending verification items. It never generates policy quotations or predicts a payout. `pdf_worker.sections` recognizes numbered special-rider titles, handles nested parentheses in article headings and stops at the next rider. Source spans are merged contiguously within each page without rewriting. Unknown layouts and weak/negative connections remain unresolved. Referenced general provisions/appendices are flagged for further verification, not presumed satisfied. Blank context is filtered both server-side and in the viewer; duplicated glyph highlights are suppressed.
+The application can identify an expressly described benefit and distinguish direct wording from an indirect ingredient link. `policy_scope.py` reads grouped source articles after retrieval and returns source IDs, fixed connection labels and pending verification items. It never generates policy quotations or predicts a payout. `pdf_worker.sections` recognizes numbered special-rider titles, handles nested parentheses in article headings and stops at the next rider. Source spans are merged contiguously within each page without rewriting. Unknown layouts and weak/negative connections remain unresolved. Referenced general provisions/appendices are flagged for further verification, not presumed satisfied. Blank context is filtered both server-side and in the viewer; duplicated glyph highlights are suppressed.

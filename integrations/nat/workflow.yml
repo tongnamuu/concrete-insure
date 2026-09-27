@@ -1,5 +1,0 @@
-workflow:
-  _type: insurelens_evidence
-  base_url: http://127.0.0.1:8000
-  cookie_env: INSURELENS_SESSION_COOKIE
-  timeout_seconds: 180
