@@ -15,7 +15,7 @@ const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECU
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 try{
-await page.goto(base);await expect(page.locator('#availability')).toHaveText('NVIDIA 연결 설정됨');
+await page.goto(base);await expect(page.locator('#availability')).toHaveText('검색 준비 완료');
 await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText(path.basename(pdf),{timeout:120000});await expect(page.locator('#pdfCanvas')).toBeVisible();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});
 await page.locator('#query').fill(term);await page.locator('#send').click();await acceptConsent(page);await expect(page.locator('.quote-card').first()).toBeVisible({timeout:120000});await expect(page.locator('.quote-card blockquote').first()).toContainText(term);
 await page.locator('.quote-card button').first().click();await page.locator('#zoomIn').click();await expect(page.locator('#zoomValue')).toHaveText('120%');await expect(page.locator('#highlights polygon').first()).toBeAttached();
