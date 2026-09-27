@@ -4,7 +4,7 @@ from insurelens.core import AppError
 
 def hit(text='😀독감'):
     return {'id':'1:1:3','page':1,'start':1,'end':3,'sourceStart':0,'sourceEnd':3,'quote':text,'matchedText':'독감','segments':[],'offsetEncoding':'unicode-code-points','documentHash':'hash'}
-def assemble(hits,**kwargs):return assemble_evidence(hits=hits,mappings=[],references=[],terms=['독감'],mode='local',truncated=False,**kwargs)
+def assemble(hits,**kwargs):return assemble_evidence(hits=hits,mappings=[],references=[],terms=['독감'],mode='nim-react',truncated=False,**kwargs)
 
 def test_unicode_codepoints_and_source_integrity():
     assert assemble([hit()])['quotes'][0]['quote']=='😀독감'

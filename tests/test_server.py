@@ -8,6 +8,7 @@ import pytest_asyncio
 
 from insurelens.core import AppError
 from insurelens.server import create_app
+from tests.nim_fixture import ScriptedNim
 
 
 def fixture_pdf(text="보험약관 독감 항바이러스제 오셀타미비르"):
@@ -19,8 +20,7 @@ def fixture_pdf(text="보험약관 독감 항바이러스제 오셀타미비르"
 
 @pytest_asyncio.fixture
 async def web(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_RUNNER", "direct")
-    app = create_app(root=tmp_path, nim=SimpleNamespace(enabled=False), drugs=SimpleNamespace(enabled=False))
+    app = create_app(root=tmp_path, nim=ScriptedNim(), drugs=SimpleNamespace(enabled=False))
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:9876", headers={"X-Local-Request": "1"}) as client:
             yield app, client
@@ -47,6 +47,7 @@ async def test_full_api_and_persisted_events(web):
     app, client = web
     config = (await client.get("/api/config")).json()
     assert config["backend"] == "python"
+    assert config["nimEnabled"] is True and config["orchestrator"] == "nat"
     response = await client.post("/api/cases")
     assert response.status_code == 201
     case = response.json()["id"]
@@ -59,13 +60,14 @@ async def test_full_api_and_persisted_events(web):
     event_ids = [int(line[4:]) for line in replay.text.splitlines() if line.startswith("id: ")]
     resumed = await client.get(f"/api/jobs/{indexed['id']}/events", headers={"Last-Event-ID": str(event_ids[-2])})
     assert resumed.text.count("id: ") == 1
-    response = await client.post(f"/api/cases/{case}/investigations", json={"description": "조카가 독감 진단을 받았어요. 처방전은 없어요."})
+    response = await client.post(f"/api/cases/{case}/investigations", json={"description": "조카가 독감 진단을 받았어요. 처방전은 없어요.", "cloudConsent": True})
     assert response.status_code == 202
     job = await wait(client, response.json()["jobId"])
     assert job["state"] == "completed", job
     assert any("독감" in q["quote"] for q in job["result"]["quotes"])
     assert all(q["quote"].strip() for q in job["result"]["quotes"])
     assert "answer" not in job["result"]
+    assert job["result"]["mode"] == "nim-react"
     download = await client.get(f"/api/jobs/{job['id']}/annotated.pdf")
     assert download.status_code == 200
     with pymupdf.open(stream=download.content) as marked, pymupdf.open(stream=fixture_pdf()) as original:
@@ -92,7 +94,7 @@ async def test_upload_drafts_and_source_guards(web):
     assert "조플루자" in draft["candidates"] and "J10.1" in draft["candidates"]
     assert (await client.post(f"/api/cases/{case}/ocr", files={"file": ("rx.png", b"image")})).status_code == 409
     await upload(client, case)
-    for payload in ({"query": "   "}, {"query": "독감", "cloudConsent": "true"}, {"query": "독감", "injected": 1}, {"query": "독감", "drugIds": ["200001234"]}):
+    for payload in ({"query": "   "}, {"query": "독감", "cloudConsent": "true"}, {"query": "독감", "injected": 1}, {"query": "독감", "drugIds": ["200001234"], "cloudConsent":True}):
         assert (await client.post(f"/api/cases/{case}/investigations", json=payload)).status_code == 400
 
 
@@ -176,3 +178,32 @@ async def test_old_file_cleanup_failure_preserves_new_document(web, monkeypatch)
     new = app.state.store.get(case, owner)['document']
     assert new['id'] == latest['result']['document']['id']
     assert Path(new['pdf']).exists() and Path(new['index']).exists()
+
+
+async def test_missing_nvidia_key_rejects_investigation(tmp_path):
+    app = create_app(root=tmp_path, nim=SimpleNamespace(enabled=False), drugs=SimpleNamespace(enabled=False))
+    async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Local-Request":"1"}) as client:
+        case = (await client.post("/api/cases")).json()["id"]
+        await upload(client, case)
+        response = await client.post(f"/api/cases/{case}/investigations", json={"query":"독감", "cloudConsent":True})
+        assert response.status_code == 409
+        assert response.json() == {"error":"NVIDIA_KEY_REQUIRED"}
+        assert not any(j["kind"] == "investigation" for j in app.state.store.jobs(case))
+
+
+async def test_nim_timeout_remains_failed_without_local_recovery(tmp_path):
+    nim = ScriptedNim(fail_code="NIM_TIMEOUT")
+    app = create_app(root=tmp_path, nim=nim, drugs=SimpleNamespace(enabled=False))
+    async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Local-Request":"1"}) as client:
+        case = (await client.post("/api/cases")).json()["id"]
+        await upload(client, case)
+        response = await client.post(f"/api/cases/{case}/investigations", json={"query":"독감", "cloudConsent":True})
+        assert response.status_code == 202
+        job = await wait(client, response.json()["jobId"])
+        assert job["state"] == "failed" and job["result"] is None
+        assert job["error"] == "NIM_TIMEOUT"
+        events = (await client.get(f"/api/jobs/{job['id']}/events")).text
+        assert "event: failed" in events and "NIM_TIMEOUT" in events
+        assert "local_recovery" not in events and "로컬" not in events
+        assert "event: completed" not in events
+        assert nim.calls == ["chat"]

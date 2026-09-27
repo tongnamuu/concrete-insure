@@ -61,3 +61,18 @@ async def test_prescription_no_consent_and_ocr_spelling_are_preserved():
         enabled=True
         async def chat(self,messages):return '{"terms":["독감"]}'
     with pytest.raises(AppError,match='UNGROUNDED_TERM'):await prescription_candidates('제품명: 타미플루',nim=Ungrounded(),consent=True)
+
+@pytest.mark.asyncio
+async def test_runtime_input_understanding_never_substitutes_literal_extraction():
+    class NoCalls:
+        enabled=True
+        async def chat(self,messages):pytest.fail('missing consent')
+    with pytest.raises(AppError,match='NVIDIA_KEY_REQUIRED'):
+        await understand_input_with_model({'query':'독감','cloudConsent':True},None)
+    with pytest.raises(AppError,match='NIM_CONSENT_REQUIRED'):
+        await understand_input_with_model({'query':'독감'},NoCalls())
+    class Failure:
+        enabled=True
+        async def chat(self,messages):raise AppError('NIM_TIMEOUT')
+    with pytest.raises(AppError,match='NIM_TIMEOUT'):
+        await understand_input_with_model({'query':'독감','cloudConsent':True},Failure())

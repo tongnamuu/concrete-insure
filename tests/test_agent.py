@@ -3,7 +3,6 @@ import json
 import pytest
 from insurelens.agent import run_investigation
 from insurelens.core import AppError
-from insurelens.provider_fallback import with_provider_fallback
 
 HIT = {'id':'1:0:2','page':1,'start':0,'end':2,'sourceStart':0,'sourceEnd':5,'quote':'독감 원문','matchedText':'독감','segments':[],'documentHash':'hash','offsetEncoding':'unicode-code-points'}
 REQUEST = {'query':'독감 관련 내용 찾아줘','description':'','confirmedTerms':[],'cloudConsent':True}
@@ -27,8 +26,7 @@ async def run(nim=None,request=None,op=operation):
     return await run_investigation(document={'pdf':'/trusted.pdf','index':'/trusted.index'},request=request or REQUEST,products=[],nim=nim,operation=op)
 
 @pytest.mark.asyncio
-async def test_local_and_cloud_preserve_sources_without_model_answer():
-    assert (await run())['quotes'][0]['quote']==HIT['quote']
+async def test_nim_preserves_sources_without_model_answer():
     nim=Nim([call(),STOP]);result=await run(nim)
     assert result['mode']=='nim-react' and result['quotes']==[HIT]
     assert 'fabricated' not in json.dumps(result)
@@ -46,27 +44,12 @@ async def test_repeat_refused_and_explicit_finish_supported():
     result=await run(Nim([call(),call('read_context',{'hitId':HIT['id']},'context'),call('finish_retrieval',{},'finish')]))
     assert result['quotes']==[HIT]
 
-@pytest.mark.asyncio
-async def test_cancellation_never_becomes_provider_fallback():
-    async def cancelled(**kwargs):raise asyncio.CancelledError()
-    async def badlocal(**kwargs):pytest.fail('must not recover cancellation')
-    with pytest.raises(asyncio.CancelledError):await with_provider_fallback({'request':REQUEST},cancelled,badlocal)
 
-@pytest.mark.asyncio
-async def test_fallback_is_fresh_and_labelled():
-    async def fail(**kwargs):raise AppError('NIM_TIMEOUT',504)
-    async def local(**kwargs):
-        assert not kwargs['nim'].enabled and not kwargs['request']['cloudConsent'] and not kwargs['request']['translation']
-        return {'quotes':[HIT]}
-    result=await with_provider_fallback({'request':{**REQUEST,'translation':True}},fail,local)
-    assert result['warnings']==['NIM_TIMEOUT'] and result['mode']=='local'
-    async def ungrounded(**kwargs):raise AppError('UNGROUNDED_TERM')
-    with pytest.raises(AppError,match='UNGROUNDED_TERM'):await with_provider_fallback({'request':REQUEST},ungrounded,local)
 
 @pytest.mark.asyncio
 async def test_empty_source_is_unresolved_not_coverage_denial():
     async def empty(payload):return {'hits':[],'truncated':False}
-    result=await run(op=empty)
+    result=await run(Nim([call(),STOP]),op=empty)
     assert result['quotes']==[] and result['coverage']['status']=='unresolved'
 
 @pytest.mark.asyncio
@@ -80,47 +63,49 @@ async def test_step_limit_and_translation_boundary():
         async def gloss(self,terms):return [{'id':0,'original':'changed','english':'flu'}]
     with pytest.raises(AppError,match='TRANSLATION_BOUNDARY'):await run(Translated([]),{**REQUEST,'translation':True})
 
-@pytest.mark.asyncio
-async def test_fallback_does_not_reuse_or_mutate_partial_provider_facts():
-    from copy import deepcopy
-    payload={'document':{'pdf':'original'},'request':{**REQUEST,'confirmedTerms':['독감']},'products':[{'name':'original'}]}
-    before=deepcopy(payload)
-    async def primary(**kwargs):
-        kwargs['request']['confirmedTerms'].append('invented')
-        kwargs['document']['pdf']='mutated'
-        kwargs['products'][0]['name']='mutated'
-        raise AppError('NIM_INVALID_JSON')
-    calls=[]
-    async def local(**kwargs):
-        calls.append(kwargs)
-        assert kwargs['request']['confirmedTerms']==['독감']
-        assert kwargs['document']['pdf']=='original' and kwargs['products'][0]['name']=='original'
-        kwargs['request']['confirmedTerms'].append('local change')
-        return {'quotes':[],'coverage':{'status':'unresolved'}}
-    result=await with_provider_fallback(payload,primary,local)
-    assert len(calls)==1 and payload==before
-    assert result['mode']=='local' and result['warnings']==['NIM_INVALID_JSON']
 
-@pytest.mark.asyncio
-async def test_pending_task_cancel_cannot_start_local_recovery():
-    async def task_body():
-        async def primary(**kwargs):
-            asyncio.current_task().cancel()
-            raise AppError('NIM_TIMEOUT')
-        async def local(**kwargs):pytest.fail('pending cancellation must prevent fallback')
-        await with_provider_fallback({'request':REQUEST},primary,local)
-    task=asyncio.create_task(task_body())
-    with pytest.raises(asyncio.CancelledError):await task
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('code',['SOURCE_INTEGRITY','INVALID_SOURCE_SPAN','INVALID_COVERAGE_SOURCE','UNGROUNDED_TERM'])
-async def test_evidence_failures_never_retry_locally(code):
-    async def primary(**kwargs):raise AppError(code)
-    async def local(**kwargs):pytest.fail('evidence failure must be surfaced')
-    with pytest.raises(AppError,match=code):await with_provider_fallback({'request':REQUEST},primary,local)
 
 @pytest.mark.asyncio
 async def test_description_only_investigation_has_no_generated_diagnosis():
-    result=await run(request={'description':'조카가 독감이라고 했어요.','cloudConsent':False})
-    assert result['quotes']==[HIT] and result['mode']=='local'
+    result=await run(Nim([call(),STOP]),request={'description':'조카가 독감이라고 했어요.','cloudConsent':True})
+    assert result['quotes']==[HIT] and result['mode']=='nim-react'
     assert 'diagnosis' not in result and 'answer' not in result
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('nim,case_input,code',[(None,REQUEST,'NVIDIA_KEY_REQUIRED'),(Nim([]),{**REQUEST,'cloudConsent':False},'NIM_CONSENT_REQUIRED'),(Nim([]),{'query':'독감'},'NIM_CONSENT_REQUIRED')])
+async def test_provider_and_explicit_consent_required_before_any_work(nim,case_input,code):
+    async def no_pdf(payload):pytest.fail('must not search without provider and consent')
+    def no_event(*args):pytest.fail('must not begin work without provider and consent')
+    with pytest.raises(AppError,match=code):
+        await run_investigation(document={},request=case_input,nim=nim,operation=no_pdf,emit=no_event)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('code',['NIM_TIMEOUT','NIM_AUTH_FAILED','NIM_MODEL_UNAVAILABLE','NIM_INVALID_JSON','UNGROUNDED_TERM'])
+async def test_input_provider_failures_propagate_without_local_execution(code):
+    class Failing(Nim):
+        async def chat(self,messages,model=None):raise AppError(code)
+    async def no_pdf(payload):pytest.fail('must not start a local substitute')
+    with pytest.raises(AppError,match=code):await run(Failing([]),op=no_pdf)
+
+@pytest.mark.asyncio
+async def test_react_failure_does_not_repeat_search_or_return_partial_result():
+    class Failing(Nim):
+        async def complete(self,messages,tools):
+            if not self.messages:
+                self.messages.append(messages)
+                return call()
+            raise AppError('NIM_TIMEOUT')
+    operations=[]
+    async def counted(payload):
+        operations.append(payload['op'])
+        return await operation(payload)
+    with pytest.raises(AppError,match='NIM_TIMEOUT'):await run(Failing([]),op=counted)
+    assert operations==['search']
+
+@pytest.mark.asyncio
+async def test_task_cancellation_propagates_without_search():
+    class Cancelled(Nim):
+        async def chat(self,messages,model=None):raise asyncio.CancelledError()
+    async def no_pdf(payload):pytest.fail('cancelled task must stop')
+    with pytest.raises(asyncio.CancelledError):await run(Cancelled([]),op=no_pdf)

@@ -21,7 +21,7 @@ See contracts.md for exact fields. A prescription can be replaced by a free-text
 
 ## Provider connections
 
-Nemotron/NIM: AsyncNeMoMicroservices.chat.completions.create using native tool_calls and finish_reason. The official SDK1.5.0 handles inference requests; NAT1.9.0 directly invokes Python modules using a task-local invocation token. No key means explicitly labelled deterministic local mode. Never substitute fabricated cloud results. Hosted OCR uses its distinct documented input/image_url schema, not chat-completions messages. Configure the actual multilingual OCR endpoint after verifying account/model access. Hosted JSON extraction and native tool calls have been tested with a real key using public/synthetic data. See validation.md for full workflow results and limitations. No actual user medical document was used in cloud testing.
+Nemotron/NIM: AsyncNeMoMicroservices.chat.completions.create using native tool_calls and finish_reason. The official SDK1.5.0 handles inference requests; NAT1.9.0 directly invokes Python modules using a task-local invocation token. NAT and NIM are mandatory for every investigation. A missing key blocks investigation; provider and control-protocol failures terminate the job. Hosted OCR uses its distinct documented input/image_url schema, not chat-completions messages. Configure the actual multilingual OCR endpoint after verifying account/model access. Hosted JSON extraction and native tool calls have been tested with a real key using public/synthetic data. See validation.md for full workflow results and limitations. No actual user medical document was used in cloud testing.
 
 MFDS: official DrugPrdtPrmsnInfoService08/getDrugPrdtPrmsnInq08. The public Swagger on data.go.kr as retrieved2026-09-27 names this v08 endpoint. Decoder preserves ITEM_INGR_NAME; no unsourced salt removal, brand alias or code-to-disease conversion. Product selection is explicit. Main-ingredient string equality or a quote match is never labelled medically/contractually suitable. Disease codes are searched literally; no KCD meanings are invented.
 
@@ -58,7 +58,7 @@ Ingredient hits anchor nearby pages before broader product-indication terms are 
 
 Official source: https://www.roche.co.kr/solutions/pharma-solutions/xofluza and the linked 2026-09-09 product document; catalog records checked2026-09-27. Structured generation reference: https://docs.nvidia.com/nim/large-language-models/2.0.10/get-started/advanced/get-started-nemotron-3.5-lightning.html .
 
-The supervisor exposes an empty-argument finish_retrieval tool so native callers can terminate after source inspection. A model protocol failure ends that run; the adapter can launch a fresh deterministic investigation and label its result local with warning codes. Source-integrity failures, ungrounded terms and cancellation are not silently recovered.
+The supervisor exposes an empty-argument finish_retrieval tool so native callers can terminate after source inspection. Model protocol failures, provider errors, source-integrity failures, ungrounded terms and cancellation terminate that run. No alternate investigation path exists.
 
 ## Policy benefit and source grouping
 

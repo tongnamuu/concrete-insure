@@ -417,7 +417,10 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "langchain-core" },
     { name = "nemo-microservices" },
+    { name = "nvidia-nat" },
+    { name = "packaging" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pymupdf" },
@@ -431,20 +434,15 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
-nat = [
-    { name = "langchain-core" },
-    { name = "nvidia-nat" },
-    { name = "packaging" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "httpx", specifier = "==0.28.1" },
-    { name = "langchain-core", marker = "extra == 'nat'", specifier = ">=1,<2" },
+    { name = "langchain-core", specifier = ">=1,<2" },
     { name = "nemo-microservices", specifier = "==1.5.0" },
-    { name = "nvidia-nat", marker = "extra == 'nat'", specifier = "==1.9.0" },
-    { name = "packaging", marker = "extra == 'nat'", specifier = ">=24" },
+    { name = "nvidia-nat", specifier = "==1.9.0" },
+    { name = "packaging", specifier = ">=24" },
     { name = "pillow", specifier = "==12.3.0" },
     { name = "pydantic", specifier = "==2.13.5" },
     { name = "pymupdf", specifier = "==1.28.2" },
@@ -454,7 +452,7 @@ requires-dist = [
     { name = "python-multipart", specifier = "==0.0.32" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["nat", "dev"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "jinja2"

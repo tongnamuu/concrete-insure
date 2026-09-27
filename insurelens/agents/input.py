@@ -15,8 +15,8 @@ def understand_input(request):
 
 async def understand_input_with_model(request, nim=None):
     request = QueryRequest.model_validate(request).model_dump()
-    if not getattr(nim, 'enabled', False) or not request.get('cloudConsent', False):
-        return understand_input(request)
+    ensure(getattr(nim, 'enabled', False), 'NVIDIA_KEY_REQUIRED', 409)
+    ensure(request.get('cloudConsent') is True, 'NIM_CONSENT_REQUIRED', 409)
     ensure(callable(getattr(nim, 'chat', None)), 'NIM_INPUT_PROVIDER_REQUIRED', 502)
     query, description = request.get('query', ''), request.get('description', '')
     confirmed = request.get('confirmedTerms', [])

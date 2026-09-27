@@ -9,7 +9,6 @@ from unittest.mock import patch
 from insurelens import nat as integration
 
 
-@unittest.skipUnless(integration.nat_available(), "Install the nat extra")
 class NativeNatTests(unittest.IsolatedAsyncioTestCase):
     def fake_module(self, fn):
         module = types.ModuleType("insurelens.agent")
@@ -17,7 +16,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
         return patch.dict(sys.modules, {"insurelens.agent": module})
 
     def arguments(self, ident="one", emit=lambda *_: None):
-        return {"document": {"id": ident, "pdf": "/private/source.pdf", "index": "/private/source.index"}, "request": {"query": ident}, "products": [], "nim": object(), "emit": emit}
+        return {"document": {"id": ident, "pdf": "/private/source.pdf", "index": "/private/source.index"}, "request": {"query": ident, "cloudConsent": True}, "products": [], "nim": types.SimpleNamespace(enabled=True), "emit": emit}
 
     async def test_actual_nat_calls_python_and_preserves_callback(self):
         events, tokens = [], []
@@ -26,7 +25,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(received["nim"], args["nim"])
             self.assertIs(received["emit"], args["emit"])
             received["emit"]("stage_started", {"stage": "native"})
-            return {"quotes": [{"quote": "변경 없는 원문"}], "mode": "local"}
+            return {"quotes": [{"quote": "변경 없는 원문"}], "mode": "nim-react"}
         original = integration.invoke_native
         async def inspect(token):
             tokens.append(token)
@@ -34,7 +33,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(token), 32)
             return await original(token)
         with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": "nat"}), patch.object(integration, "invoke_native", inspect), patch("asyncio.create_subprocess_exec", side_effect=AssertionError("NAT must not launch Node")):
-            result = await integration._run_configured(**args)
+            result = await integration.configured_investigation(**args)
         self.assertEqual(result["quotes"][0]["quote"], "변경 없는 원문")
         self.assertEqual(events, [("stage_started", {"stage": "native"})])
         self.assertEqual(len(tokens), 1)
@@ -53,9 +52,9 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_invocations_keep_inputs_isolated(self):
         async def agent(**args):
             await asyncio.sleep(0.01)
-            return {"quotes": [], "identity": args["document"]["id"], "mode": "local"}
+            return {"quotes": [], "identity": args["document"]["id"], "mode": "nim-react"}
         with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": "nat"}):
-            results = await asyncio.gather(*(integration._run_configured(**self.arguments(str(i))) for i in range(3)))
+            results = await asyncio.gather(*(integration.configured_investigation(**self.arguments(str(i))) for i in range(3)))
         self.assertEqual([r["identity"] for r in results], ["0", "1", "2"])
         self.assertIsNone(integration._invocation.get())
 
@@ -68,7 +67,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 cancelled.set()
         with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": "nat"}):
-            task = asyncio.create_task(integration._run_configured(**self.arguments()))
+            task = asyncio.create_task(integration.configured_investigation(**self.arguments()))
             await asyncio.wait_for(entered.wait(), 15)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
@@ -82,26 +81,43 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
             raise AppError("NIM_RATE_LIMIT", 429)
         with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": "nat"}):
             with self.assertRaises(AppError) as caught:
-                await integration._run_configured(**self.arguments())
+                await integration.configured_investigation(**self.arguments())
         self.assertEqual(caught.exception.code, "NIM_RATE_LIMIT")
         self.assertEqual(caught.exception.status, 429)
         self.assertIsNone(integration._invocation.get())
 
-    async def test_direct_mode_skips_nat_and_calls_same_agent(self):
+    async def test_legacy_runner_environment_cannot_bypass_nat(self):
         async def agent(**args):
-            return {"quotes": [], "mode": "local"}
-        with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": "direct"}), patch("nat.runtime.loader.load_workflow", side_effect=AssertionError("must bypass NAT")):
-            self.assertEqual(await integration._run_configured(**self.arguments()), {"quotes": [], "mode": "local"})
+            return {"quotes": [], "mode": "nim-react"}
+        for old_mode in ("auto", "direct", "local"):
+            with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": old_mode}), patch.object(integration, "load_workflow", wraps=integration.load_workflow) as workflow:
+                await integration.configured_investigation(**self.arguments())
+                self.assertEqual(workflow.call_count, 1)
 
-    def test_auto_and_explicit_missing_runtime(self):
-        with patch.object(integration, "nat_available", return_value=False):
-            with patch.dict(os.environ, {"AGENT_RUNNER": "auto"}):
-                self.assertEqual(integration.runner_mode(), "direct")
-            with patch.dict(os.environ, {"AGENT_RUNNER": "nat"}):
-                with self.assertRaisesRegex(Exception, "NAT_RUNTIME_MISSING"):
-                    integration.runner_mode()
-        with patch.dict(os.environ, {"AGENT_RUNNER": "auto"}):
-            self.assertEqual(integration.runner_mode(), "nat")
+    def test_missing_nat_import_is_fatal(self):
+        import builtins
+        import importlib.util
+        from insurelens.core import AppError
+        original = builtins.__import__
+        def importing(name, *args, **kwargs):
+            if name == "nat" or name.startswith("nat."):
+                raise ModuleNotFoundError("NAT missing", name="nat")
+            return original(name, *args, **kwargs)
+        spec = importlib.util.spec_from_file_location("missing_nat_fixture", integration.__file__)
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"missing_nat_fixture": module}), patch("builtins.__import__", importing):
+            with self.assertRaisesRegex(AppError, "NAT_RUNTIME_MISSING"):
+                spec.loader.exec_module(module)
+
+    async def test_no_key_or_consent_cannot_enter_workflow(self):
+        from insurelens.core import AppError
+        for enabled, consent, code in ((False, True, "NVIDIA_KEY_REQUIRED"), (True, False, "NIM_CONSENT_REQUIRED")):
+            args = self.arguments()
+            args["nim"] = types.SimpleNamespace(enabled=enabled)
+            args["request"]["cloudConsent"] = consent
+            with patch.object(integration, "load_workflow", side_effect=AssertionError("cannot enter workflow")):
+                with self.assertRaisesRegex(AppError, code):
+                    await integration.configured_investigation(**args)
 
 
 if __name__ == "__main__":

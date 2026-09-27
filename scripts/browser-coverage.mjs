@@ -15,7 +15,7 @@ const server=await startPythonTestServer(path.join(temp,'test-data'));const base
 const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})}).catch(async error=>{await server.close();await rm(temp,{recursive:true,force:true});throw error;});
 const page=await browser.newPage({viewport:{width:1440,height:1100}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto(base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('test-policy.pdf',{timeout:30000});
+ await page.goto(base);await page.locator('.settings summary').click();await page.locator('#cloudConsent').check();await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('test-policy.pdf',{timeout:30000});
  await page.locator('#description').fill('조플루자를 처방받았습니다.');await page.locator('#searchDescription').click();
  await expect(page.locator('.coverage-status')).toHaveText('약관에 관련 보장 항목이 명시되어 있습니다.',{timeout:60000});
  await expect(page.locator('.coverage-link')).toContainText('성분 근거를 통한 간접 연결');await expect(page.locator('.coverage-link')).toContainText('조플루자 → 발록사비르');await expect(page.locator('.coverage-caution')).toContainText('실제 보장은');
@@ -27,6 +27,6 @@ try{
  execFileSync(python,['-c',"import pymupdf as f,sys;d=f.open(sys.argv[1]);assert sum(len(list(p.annots() or [])) for p in d)>0;assert '발록사비르' in ''.join(p.get_text() for p in d)",path.join(temp,'marked.pdf')]);
  // A compact screenshot of the decision scope and source connection; no personal data.
  await page.locator('.clause-group[data-kind="payment"] summary').click();await definition.locator('summary').click();if(process.env.SCREENSHOT)await page.locator('.coverage-panel').screenshot({path:process.env.SCREENSHOT});
- await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
- console.log(JSON.stringify({ok:true,orchestrator:process.env.TEST_AGENT_RUNNER||'auto',policyBenefit:true,ingredientLink:true,allFourClauses:true,noBlankCards:true,nextRiderExcluded:true,highlight:true,download:true,clearAndReload:true,browserErrors:errors}));
+ await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await page.locator('.settings summary').click();await page.locator('#cloudConsent').check();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({ok:true,orchestrator:'nat',inference:'explicit-test-fixture',policyBenefit:true,ingredientLink:true,allFourClauses:true,noBlankCards:true,nextRiderExcluded:true,highlight:true,download:true,clearAndReload:true,browserErrors:errors}));
 }catch(e){console.error(JSON.stringify({error:e.message,uiError:await page.locator('#error').textContent()}));process.exitCode=1;}finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

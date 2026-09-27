@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException
 from .core import AppError, DrugLookupRequest, QueryRequest, ensure
 from .pdf import pdf_operation
 from .store import Queue, Store
+from .nat import configured_investigation
 
 ROOT = Path(__file__).resolve().parents[1]
 SECURITY_HEADERS = {
@@ -93,7 +94,6 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
 
     if investigate is None:
         async def investigate(**kwargs):
-            from .nat import configured_investigation
             return await configured_investigation(**kwargs)
 
     @asynccontextmanager
@@ -152,8 +152,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
 
     @app.get("/api/config")
     async def config():
-        from .nat import runner_mode
-        return {"nimEnabled": nim.enabled, "ocrEnabled": bool(getattr(nim, "ocr_enabled", False)), "mfdsEnabled": bool(getattr(drugs, "enabled", False)), "translationEnabled": bool(nim.enabled and getattr(nim, "translation_model", "")), "mode": "nim-react" if nim.enabled else "local", "orchestrator": runner_mode(), "backend": "python", "inferenceClient": "nemo-microservices"}
+        return {"nimEnabled": nim.enabled, "ocrEnabled": bool(getattr(nim, "ocr_enabled", False)), "mfdsEnabled": bool(getattr(drugs, "enabled", False)), "translationEnabled": bool(nim.enabled and getattr(nim, "translation_model", "")), "mode": "nim-react", "orchestrator": "nat", "ready": bool(nim.enabled), "backend": "python", "inferenceClient": "nemo-microservices"}
 
     @app.post("/api/cases", status_code=201)
     async def create_case(request: Request):
@@ -280,7 +279,8 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
     async def investigate_case(identifier: UUID, request: Request, body: QueryRequest):
         case = case_for(identifier, request)
         ensure(case["document"], "DOCUMENT_REQUIRED", 409)
-        ensure(not nim.enabled or body.cloudConsent, "NIM_CONSENT_REQUIRED", 409)
+        ensure(nim.enabled, "NVIDIA_KEY_REQUIRED", 409)
+        ensure(body.cloudConsent, "NIM_CONSENT_REQUIRED", 409)
         ensure(all(i in case["products"] for i in body.drugIds), "DRUG_SELECTION_REQUIRED")
         products = [case["products"][i] for i in body.drugIds]
         job_id = app.state.store.create_job(case["id"], "investigation", case["document"]["id"])

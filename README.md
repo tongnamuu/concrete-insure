@@ -9,16 +9,16 @@
 Python 3.12 또는 3.13, [uv](https://docs.astral.sh/uv/), Node.js 22.13 이상이 필요합니다. Node/npm은 PDF.js 정적 파일 설치와 브라우저 검사 도구용입니다.
 
 ```sh
-uv sync --extra nat --extra dev
+uv sync --extra dev
 npm ci
 # 처음 설치한 경우에만 .env.example을 .env로 복사합니다.
 # 기존 .env가 있으면 그대로 사용합니다.
-uv run --extra nat insure-lens
+uv run insure-lens
 ```
 
 브라우저에서 http://127.0.0.1:8000 을 엽니다. 기존 `npm start`도 Python 서버를 실행하도록 연결했습니다. 한 프로젝트의 데이터 디렉터리에는 서버를 하나만 실행하세요.
 
-`.env`의 `NVIDIA_API_KEY`만 설정하면 기본 Nemotron 모델을 사용할 수 있습니다. 기본값은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 키가 없으면 화면에 표시되는 로컬 근거 탐색 모드로 작동합니다. 외부 모델로 입력·약관 발췌문을 전송하기 전에 웹의 전송 동의가 필요합니다. 제공자 시간 초과나 잘못된 도구 응답은 알림 후 로컬에서 새로 조사하며 결과에 실제 실행 모드를 표시합니다.
+`.env`의 `NVIDIA_API_KEY`만 설정하면 기본 Nemotron 모델을 사용할 수 있습니다. 기본값은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 키가 없으면 조사를 시작할 수 없고 설정 필요 상태를 표시합니다. 외부 모델로 입력·약관 발췌문을 전송하기 전에 웹의 전송 동의가 필요합니다. 모든 조사는 NAT와 Nemotron NIM을 거칩니다. 제공자 시간 초과나 잘못된 도구 응답은 실패로 알리며 재시도할 수 있습니다.
 
 | 선택 설정 | 필요한 경우 |
 |---|---|
@@ -27,7 +27,6 @@ uv run --extra nat insure-lens
 | `NIM_OCR_URL` | 이미지·스캔 처방전 OCR. 실제 사용 가능한 한국어 지원 endpoint 필요 |
 | `MFDS_API_KEY` | 공공데이터포털 의약품 제품 허가정보 v08 실시간 조회용 디코딩 키 |
 | `TRANSLATION_MODEL` | 별도 경량 모델의 참고용 영어 표현. 원문·검색어·인용문은 변경하지 않음 |
-| `AGENT_RUNNER=auto` | 설치된 NAT 사용. `nat`는 NAT 필수, `direct`는 Python 직접 실행 |
 
 NeMo Microservices SDK는 서비스에 접속하는 클라이언트입니다. SDK 설치만으로 Guardrails·Evaluator·Customizer 서비스가 배포되지는 않습니다. 현재 SDK로 실행하는 기능은 **NIM 추론**이며, 별도 NeMo Guardrails Microservice를 사용했다고 표시하지 않습니다. 원문·검색어·좌표 검증은 애플리케이션에서 항상 수행합니다.
 
@@ -63,7 +62,7 @@ ReAct의 모델 출력은 허용된 도구와 ID를 고르는 데만 사용합�
 웹과 CLI는 같은 Python 모듈을 호출합니다. 웹이 매번 별도 CLI 프로세스를 실행하는 구조는 아닙니다. 세 스킬은 `ocr-prescription`, `drug-ingredient-resolver`, `pdf-iso32000-annotator`이며 각 `SKILL.md`에 JSON 입출력과 사용법이 있습니다. 상위 원문 규칙은 `insure-lens-source`입니다.
 
 ```sh
-uv run --extra nat --extra dev pytest -q
+uv run --extra dev pytest -q
 npm run test:browser
 npm run test:browser:coverage
 npx skills@1.7.0 add . --list
