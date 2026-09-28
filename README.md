@@ -4,6 +4,47 @@ concreteInsure는 보험약관 PDF와 사용자 상황 설명으로 관련 보�
 
 백엔드는 **Python FastAPI + NeMo Microservices Python SDK + NVIDIA NeMo Agent Toolkit(NAT)** 입니다. JavaScript는 PDF.js 웹 화면과 브라우저 검사에 사용합니다. Node.js 서버나 Node로 돌아가는 에이전트는 없습니다. 사용자 접점은 웹이며 NemoClaw와 파인튜닝은 포함하지 않습니다.
 
+## 사용자 입력부터 NVIDIA 연동까지
+
+기본 웹 흐름은 약관 PDF와 상황 설명으로 시작합니다. PDF의 원문·문자 좌표는 로컬에서 추출하고, 검색마다 전송 동의를 받은 뒤 NAT 워크플로가 필요한 NVIDIA 추론과 도구 실행을 연결합니다.
+
+```mermaid
+flowchart TB
+    DOC["약관 PDF"] --> INDEX["PyMuPDF<br/>원문·문자 좌표 인덱싱"]
+    INPUT["상황 설명 · 약품명 · 후속 질문"] --> CONSENT["NVIDIA 전송 동의"]
+    CONSENT --> API["FastAPI · SQLite<br/>대화·작업 관리"]
+    API --> NAT["NVIDIA NeMo Agent Toolkit<br/>입력 확인 → 조건부 성분 조사<br/>→ 약관 검색 ReAct 루프"]
+
+    NAT <-->|모델 추론| SDK["NeMo Microservices Python SDK<br/>AsyncNeMoMicroservices"]
+    SDK <-->|chat.completions.create| NIM["NVIDIA hosted NIM<br/>Nemotron 3.5 Lightning 30B A3B"]
+    NAT <-->|약품 정보가 있을 때| MFDS["Python 조회 도구<br/>식약처 제품·성분·허가 원문"]
+    INDEX --> TOOLS["Python PDF 도구<br/>원문 검색 · 문맥 조회"]
+    NAT <-->|도구 호출과 관찰 결과| TOOLS
+
+    NAT -->|검색 완료| VERIFY["Python 근거·좌표 검증<br/>원문 구간 직접 반환"]
+    VERIFY -->|SSE 결과 전달| VIEW["1:1 웹 화면<br/>대화·원문·출처<br/>PDF.js 하이라이트"]
+    VIEW -->|PDF 저장 요청| EXPORT["PyMuPDF<br/>ISO 32000 Highlight 주석"]
+
+    classDef nvidia fill:#eef8dc,stroke:#76b900,color:#20340b
+    class NAT,SDK,NIM nvidia
+```
+
+NAT 안의 모델 호출은 공통 NeMo Microservices SDK를 통해 hosted NIM으로 전달됩니다. 입력 추출은 구조화 JSON을, 성분 에이전트와 ReAct 검색은 함수 도구 호출을 사용합니다. 성분 조사는 NAT 내장 에이전트이고, 약관 검색은 등록된 NAT 워크플로 안의 자체 ReAct 루프입니다. 제품 후보가 나오면 사용자가 함량·제형을 선택하고 전송에 다시 동의합니다. 입력과 후보를 저장해 두므로 입력 분석부터 반복하지 않고 성분 조사부터 재개합니다. 진행 상태와 결과는 SSE로 전달합니다.
+
+| 기술 | 현재 구현에서의 역할 |
+|---|---|
+| Nemotron `nvidia/nemotron-3.5-lightning-30b-a3b` | 기본 추론 모델. 명시 정보 추출 및 허용 도구·ID 선택 |
+| NVIDIA hosted NIM | `https://integrate.api.nvidia.com/v1` 모델 추론 엔드포인트 |
+| NVIDIA NeMo Agent Toolkit `nvidia-nat[langchain]==1.9.0` | 모든 조사 워크플로 실행, 조건부 `tool_calling_agent`와 `medicine` Function Group 등록 |
+| NeMo Microservices Python SDK `nemo-microservices==1.5.0` | `AsyncNeMoMicroservices.chat.completions.create`로 NIM 호출 |
+| skills.sh 호환 `SKILL.md`·Python CLI | 도구 사용 지침과 개별 실행 인터페이스. 웹에서는 같은 Python 모듈을 직접 호출 |
+| FastAPI·Pydantic·SQLite·SSE | 요청 검증, 대화·작업·선택 대기 저장, 진행 상태와 결과 전달 |
+| PyMuPDF·PDF.js | 원문 구간·문자 좌표 추적, 브라우저 표시, 표준 Highlight 주석 저장 |
+
+**LLM이 작성한 최종 문장은 결과에 사용하지 않습니다.** 애플리케이션이 원문 구간과 근거 ID를 검증해 직접 반환하며 질병·실제 보험금 지급 여부를 추정하지 않습니다. 식약처 조회는 실시간 공식 API를 사용하는 별도 Python 도구이며 NIM이 성분 정보를 생성하는 구조가 아닙니다. 사용자 상황·관련 대화·검색 후보·약관 발췌문은 동의 후 추론에 사용될 수 있습니다.
+
+이미지·스캔 처방전 OCR과 API 전용 번역은 이 기본 흐름에 포함하지 않으며 [선택 기능 문서](docs/optional-features.md)에 별도로 설명합니다. SkillSpector는 개발 단계의 스킬 정적 검사 도구입니다. NemoClaw·OpenShell 실행 환경, 별도 NeMo Guardrails 서비스, 파인튜닝은 현재 런타임에 포함하지 않습니다.
+
 ## 실행
 
 Python 3.12 또는 3.13, [uv](https://docs.astral.sh/uv/), Node.js 22.13 이상이 필요합니다. Node/npm은 PDF.js 정적 파일 설치와 브라우저 검사 도구용입니다.
