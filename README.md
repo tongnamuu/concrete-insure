@@ -1,9 +1,6 @@
 # concreteInsure
 
-화면 표기는 `concreteInsure`, 패키지·실행 명령은 `concrete-insure`, Python 모듈은 `concreteinsure`입니다.
-이전 이름으로 설치한 작업 폴더를 갱신할 때는 자동 생성된 `insure_lens.egg-info/` 폴더를 삭제하고 아래의 `uv sync`를 실행하세요. 오래된 NAT 진입점이 함께 검색되는 것을 방지합니다.
-
-보험약관 PDF와 사용자 상황 설명으로 관련 보장 항목과 근거를 찾아 보여 주는 웹 에이전트입니다. **처방전·약봉투·의료 이미지는 필수가 아닙니다.** 약관 문구는 원문 그대로 표시하고 PDF에 형광펜 주석으로 저장합니다. **약관에 명시된 보장 항목과 성분 근거를 통한 연결**을 표시하며, 실제 가입·진단·처방·지급 조건 충족 여부는 별도 확인 대상으로 둡니다. 보험금 지급 여부나 질병을 추정하지 않습니다.
+concreteInsure는 보험약관 PDF와 사용자 상황 설명으로 관련 보장 항목과 근거를 찾아 보여 주는 웹 에이전트입니다. **처방전·약봉투·의료 이미지는 필수가 아닙니다.** 약관 문구는 원문 그대로 표시하고 PDF에 형광펜 주석으로 저장합니다. **약관에 명시된 보장 항목과 성분 근거를 통한 연결**을 표시하며, 실제 가입·진단·처방·지급 조건 충족 여부는 별도 확인 대상으로 둡니다. 보험금 지급 여부나 질병을 추정하지 않습니다.
 
 백엔드는 **Python FastAPI + NeMo Microservices Python SDK + NVIDIA NeMo Agent Toolkit(NAT)** 입니다. JavaScript는 PDF.js 웹 화면과 브라우저 검사에 사용합니다. Node.js 서버나 Node로 돌아가는 에이전트는 없습니다. 사용자 접점은 웹이며 NemoClaw와 파인튜닝은 포함하지 않습니다.
 
@@ -11,16 +8,31 @@
 
 Python 3.12 또는 3.13, [uv](https://docs.astral.sh/uv/), Node.js 22.13 이상이 필요합니다. Node/npm은 PDF.js 정적 파일 설치와 브라우저 검사 도구용입니다.
 
+저장소를 복제하고 의존성과 커밋 전 검사 훅을 설치합니다.
+
 ```sh
-uv sync --extra dev
+git clone https://github.com/tongnamuu/concrete-insure.git
+cd concrete-insure
+uv sync --extra dev --locked
 uv run python scripts/install-git-hooks.py
 npm ci
-# 처음 설치한 경우에만 .env.example을 .env로 복사합니다.
-# 기존 .env가 있으면 그대로 사용합니다.
+```
+
+프로젝트 루트에 `.env`가 없을 때만 예시 파일을 복사합니다. 기존 `.env`는 유지합니다.
+
+```sh
+if [ ! -e .env ]; then
+  cp .env.example .env
+fi
+```
+
+`.env`에 `NVIDIA_API_KEY`를 입력하세요. 약품명으로 성분을 조회하려면 아래 **식약처 API 활용 신청과 키 발급** 안내에 따라 `MFDS_API_KEY`도 설정합니다. 키를 설정한 뒤 서버를 실행합니다.
+
+```sh
 uv run concrete-insure
 ```
 
-브라우저에서 http://127.0.0.1:8000 을 엽니다. 기존 `npm start`도 Python 서버를 실행하도록 연결했습니다. 한 프로젝트의 데이터 디렉터리에는 서버를 하나만 실행하세요.
+브라우저에서 http://127.0.0.1:8000 을 엽니다. `npm start`도 같은 Python 서버를 실행합니다. 한 프로젝트의 데이터 디렉터리에는 서버를 하나만 실행하세요.
 
 `.env`의 `NVIDIA_API_KEY`만 설정하면 기본 Nemotron 모델을 사용할 수 있습니다. 기본값은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 키가 없으면 조사를 시작할 수 없고 설정 필요 상태를 표시합니다. 검색 버튼을 누르면 전송 동의문만 표시됩니다. 매번 체크 후 진행해야 요청을 전송하며, 취소·미동의 시 새 작업이나 결과를 만들지 않습니다. 처방 자료 업로드도 전송 전에 같은 동의를 받습니다. 모든 조사는 NAT와 Nemotron NIM을 거칩니다. 허용된 재시도까지 실패하거나 잘못된 도구 응답을 받으면 실패로 알립니다.
 
@@ -117,6 +129,17 @@ sh scripts/scan-skills.sh
 의약품·성분·허가문서의 정적 JSON은 `tests/fixtures/`에만 두며, 테스트 제공자(`tests/mfds_fixture.py`)가 주입하는 합성 응답으로만 사용합니다. 운영 서버·에이전트·스킬에서는 불러오지 않으며 키 누락이나 API 실패 시 대체 자료로 사용하지 않습니다.
 
 브라우저 검사는 자체 임시 저장소와 합성 PDF를 사용합니다. 시스템 Chromium을 쓰려면 `BROWSER_EXECUTABLE`을 지정하세요. 없으면 `npx playwright install chromium`으로 설치합니다. [검증 기록](docs/validation.md)에 실제 실행 결과와 미검증 기능을 구분합니다.
+
+## 프로젝트 이름과 기존 설치 업데이트
+
+| 구분 | 이름 |
+|---|---|
+| 서비스·화면 | `concreteInsure` |
+| GitHub 저장소·패키지·서버 실행 명령 | `concrete-insure` |
+| Python 모듈·NAT 진입점 | `concreteinsure` |
+| 스킬 CLI | `concreteinsure-skill` |
+
+이전 이름으로 설치한 작업 폴더에서는 서버를 종료한 뒤, 프로젝트 루트에 남은 자동 생성 메타데이터 `insure_lens.egg-info/` 폴더를 삭제하고 `uv sync --extra dev --locked`를 실행하세요. 오래된 NAT 진입점이 함께 검색되는 것을 방지합니다. 기존 `.env`를 유지한 채 `uv run concrete-insure`로 다시 시작합니다. 새로 복제한 저장소에는 이 정리가 필요하지 않습니다.
 
 ## 실행 로그와 코드 리뷰
 
