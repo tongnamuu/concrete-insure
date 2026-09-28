@@ -6,44 +6,60 @@ concreteInsure는 보험약관 PDF와 사용자 상황 설명으로 관련 보�
 
 ## 사용자 입력부터 NVIDIA 연동까지
 
-기본 웹 흐름은 약관 PDF와 상황 설명으로 시작합니다. PDF의 원문·문자 좌표는 로컬에서 추출하고, 검색마다 전송 동의를 받은 뒤 NAT 워크플로가 필요한 NVIDIA 추론과 도구 실행을 연결합니다.
+약관 PDF는 로컬에서 원문과 문자 좌표를 추출합니다. 상황 설명·후속 질문은 매번 NVIDIA 전송 동의를 받은 뒤 NAT 워크플로로 전달합니다. 아래 구조도에서 NVIDIA NIM은 추론 서비스, Nemotron은 그 서비스에서 실행하는 모델입니다.
 
 ```mermaid
 flowchart TB
-    DOC["약관 PDF"] --> INDEX["PyMuPDF<br/>원문·문자 좌표 인덱싱"]
-    INPUT["상황 설명 · 약품명 · 후속 질문"] --> CONSENT["NVIDIA 전송 동의"]
-    CONSENT --> API["FastAPI · SQLite<br/>대화·작업 관리"]
-    API --> NAT["NVIDIA NeMo Agent Toolkit<br/>입력 확인 → 조건부 성분 조사<br/>→ 약관 검색 ReAct 루프"]
+    DOC["약관 PDF"] --> INDEX["PyMuPDF · 로컬 처리<br/>원문·문자 좌표 인덱싱"]
+    INDEX --> PDFTOOLS["Python PDF 도구<br/>원문 검색 · 앞뒤 문맥 조회"]
+    INPUT["상황 설명 · 약품명 · 후속 질문"] --> CONSENT["매 검색마다 NVIDIA 전송 동의"]
+    CONSENT --> API["FastAPI · Uvicorn<br/>입력 검증 · 비동기 작업 관리"]
+    API <--> DB[("SQLite<br/>대화 · 작업 · 결과 · 선택 대기")]
+    API --> NAT["NVIDIA NeMo Agent Toolkit<br/>1.9.0 · Python 조사 워크플로"]
 
-    NAT <-->|모델 추론| SDK["NeMo Microservices Python SDK<br/>AsyncNeMoMicroservices"]
-    SDK <-->|chat.completions.create| NIM["NVIDIA hosted NIM<br/>Nemotron 3.5 Lightning 30B A3B"]
-    NAT <-->|약품 정보가 있을 때| MFDS["Python 조회 도구<br/>식약처 제품·성분·허가 원문"]
-    INDEX --> TOOLS["Python PDF 도구<br/>원문 검색 · 문맥 조회"]
-    NAT <-->|도구 호출과 관찰 결과| TOOLS
+    NAT <-->|공통 추론 클라이언트| SDK["NeMo Microservices<br/>Python SDK 1.5.0"]
+    SDK <-->|chat.completions.create| NIM["NVIDIA hosted NIM<br/>구조화 JSON · 도구 호출"]
+    NIM <--> MODEL["Nemotron 3.5 Lightning<br/>30B A3B"]
+    NAT <-->|명시된 약품 정보가 있을 때| DRUG["NAT 성분 에이전트<br/>후보 조회 · 성분/허가문서 조사"]
+    DRUG <-->|공식 API 조회| MFDS["식약처 공식 API<br/>제품 · 성분 · 허가문서"]
+    NAT <--> REACT["약관 검색 ReAct 루프<br/>도구 선택 → 실행 → 결과 관찰"]
+    REACT <--> PDFTOOLS
 
-    NAT -->|검색 완료| VERIFY["Python 근거·좌표 검증<br/>원문 구간 직접 반환"]
-    VERIFY -->|SSE 결과 전달| VIEW["1:1 웹 화면<br/>대화·원문·출처<br/>PDF.js 하이라이트"]
-    VIEW -->|PDF 저장 요청| EXPORT["PyMuPDF<br/>ISO 32000 Highlight 주석"]
+    NAT -->|조사 결과| VERIFY["Python 원문·좌표·출처 검증<br/>보장 항목 연결 · 원문 반환"]
+    VERIFY --> RESULT["작업 결과 저장<br/>SSE 완료 이벤트"]
+    RESULT --> VIEW["1:1 웹 화면<br/>대화 · PDF.js 약관 문서"]
+    API -.->|SSE 진행 상태| VIEW
+    VIEW -->|PDF 저장 요청| EXPORT["PyMuPDF<br/>표준 Highlight 주석 저장"]
 
     classDef nvidia fill:#eef8dc,stroke:#76b900,color:#20340b
-    class NAT,SDK,NIM nvidia
+    class NAT,SDK,NIM,MODEL,DRUG nvidia
 ```
 
-NAT 안의 모델 호출은 공통 NeMo Microservices SDK를 통해 hosted NIM으로 전달됩니다. 입력 추출은 구조화 JSON을, 성분 에이전트와 ReAct 검색은 함수 도구 호출을 사용합니다. 성분 조사는 NAT 내장 에이전트이고, 약관 검색은 등록된 NAT 워크플로 안의 자체 ReAct 루프입니다. 제품 후보가 나오면 사용자가 함량·제형을 선택하고 전송에 다시 동의합니다. 입력과 후보를 저장해 두므로 입력 분석부터 반복하지 않고 성분 조사부터 재개합니다. 진행 상태와 결과는 SSE로 전달합니다.
+입력 추출은 구조화 JSON을, 성분 조사와 약관 검색은 함수 도구 호출을 사용하며 모두 같은 SDK로 NIM에 연결됩니다. **성분 조사는 NAT 내장 에이전트**, **약관 검색은 NAT에 등록한 Python 워크플로 안의 자체 ReAct 루프**입니다. 성분 에이전트의 도구 선택·관찰 루프는 NAT가 실행하고, 원문 파싱·좌표 계산·검증은 Python 코드가 수행합니다.
 
-| 기술 | 현재 구현에서의 역할 |
-|---|---|
-| Nemotron `nvidia/nemotron-3.5-lightning-30b-a3b` | 기본 추론 모델. 명시 정보 추출 및 허용 도구·ID 선택 |
-| NVIDIA hosted NIM | `https://integrate.api.nvidia.com/v1` 모델 추론 엔드포인트 |
-| NVIDIA NeMo Agent Toolkit `nvidia-nat[langchain]==1.9.0` | 모든 조사 워크플로 실행, 조건부 `tool_calling_agent`와 `medicine` Function Group 등록 |
-| NeMo Microservices Python SDK `nemo-microservices==1.5.0` | `AsyncNeMoMicroservices.chat.completions.create`로 NIM 호출 |
-| skills.sh 호환 `SKILL.md`·Python CLI | 도구 사용 지침과 개별 실행 인터페이스. 웹에서는 같은 Python 모듈을 직접 호출 |
-| FastAPI·Pydantic·SQLite·SSE | 요청 검증, 대화·작업·선택 대기 저장, 진행 상태와 결과 전달 |
-| PyMuPDF·PDF.js | 원문 구간·문자 좌표 추적, 브라우저 표시, 표준 Highlight 주석 저장 |
+제품 후보에서 사용자의 선택이 필요하면 작업을 선택 대기 상태로 저장합니다. 사용자가 함량·제형을 선택하고 다시 전송에 동의하면 입력 분석을 반복하지 않고 성분 조사부터 재개합니다. SSE는 진행 상태와 완료 결과를 전달하며, 모델 답변의 토큰 스트리밍으로 사용하지 않습니다. 새로고침 시 같은 작업에 다시 연결합니다.
 
-**LLM이 작성한 최종 문장은 결과에 사용하지 않습니다.** 애플리케이션이 원문 구간과 근거 ID를 검증해 직접 반환하며 질병·실제 보험금 지급 여부를 추정하지 않습니다. 식약처 조회는 실시간 공식 API를 사용하는 별도 Python 도구이며 NIM이 성분 정보를 생성하는 구조가 아닙니다. 사용자 상황·관련 대화·검색 후보·약관 발췌문은 동의 후 추론에 사용될 수 있습니다.
+## 활용한 핵심 기술 및 AI 모델
 
-SkillSpector는 개발 단계의 스킬 정적 검사 도구입니다. NemoClaw·OpenShell 실행 환경, 별도 NeMo Guardrails 서비스, 파인튜닝은 현재 런타임에 포함하지 않습니다.
+버전은 프로젝트의 [Python 의존성](pyproject.toml)과 [브라우저 의존성](package.json)을 기준으로 기재했습니다. 모델명은 현재 기본 설정입니다.
+
+- **NVIDIA Nemotron 3.5 Lightning 30B A3B (`nvidia/nemotron-3.5-lightning-30b-a3b`)**: 사용자 설명에서 명시된 검색어·약품명을 추출하고, 에이전트가 다음에 실행할 허용 도구와 조회 대상을 선택합니다. 추출한 단어가 실제 입력에 있는지는 코드가 검증합니다.
+- **NVIDIA NIM**: Nemotron 모델을 실행하는 추론 서비스를 제공합니다. NVIDIA hosted NIM 엔드포인트에 구조화 JSON 응답과 함수 도구 호출을 요청합니다.
+- **NVIDIA NeMo Agent Toolkit 1.9.0 (`nvidia-nat[langchain]`)**: 전체 조사 워크플로를 실행합니다. 명시된 약품명이나 선택 품목이 있을 때만 별도 성분 조사 에이전트를 호출하며, 내장 `tool_calling_agent`와 `medicine` Function Group으로 식약처 조회 도구를 연결합니다. 성분과 허가문서를 함께 확인한 뒤 필수 근거가 모이면 애플리케이션 코드가 성분 조사를 종료합니다.
+- **NeMo Microservices Python SDK 1.5.0**: Python 백엔드와 NIM을 연결합니다. `AsyncNeMoMicroservices.chat.completions.create`로 추론 요청을 보내고 구조화된 응답과 도구 호출을 받습니다.
+- **ReAct 에이전트 구조**: 약관 검색에서 도구 선택 → 실행 → 결과 관찰을 반복합니다. `search_policy`로 검색하고 `read_context`로 앞뒤 문맥을 확인하며 `finish_retrieval`로 검색을 마칩니다. 모델이 작성한 최종 문장은 사용자에게 반환하지 않습니다.
+- **skills.sh 호환 Agent Skills·Python CLI**: `SKILL.md`에 원문 조회 규칙과 성분 조회·PDF 검색·주석 도구의 사용 지침 및 입출력 규약을 정의합니다. 두 도구 스킬은 `drug-ingredient-resolver`와 `pdf-iso32000-annotator`이며, `concrete-insure-source`는 상위 원문 처리 지침입니다. 웹과 CLI가 같은 Python 제공자·처리 모듈을 사용합니다.
+- **Python·FastAPI·Uvicorn·Pydantic·HTTPX**: PDF 업로드, 검색 요청, 입력 검증, 비동기 작업과 외부 API 통신을 담당합니다. 에이전트와 도구를 포함한 백엔드는 Python으로 실행합니다.
+- **식약처 의약품 제품 허가정보 API**: 약품명으로 제품 후보를 조회하고 사용자가 선택한 품목의 성분·효능효과·허가문서를 가져옵니다. `inspect_product`가 상세 응답의 성분과 사용 가능한 허가문서를 함께 검증해 약품과 약관 표현을 연결하는 공식 근거로 사용합니다. 별도로 발급받은 `MFDS_API_KEY`가 필요합니다.
+- **PyMuPDF**: PDF 원문과 문자 좌표를 추출하고 검색·문맥 조회를 수행합니다. 인용할 원문 구간을 검증하며, 다운로드 파일에 ISO 32000 형식의 `/Highlight` 주석을 생성합니다.
+- **PDF.js·HTML·CSS·JavaScript**: 좌측 대화창과 우측 PDF 약관 문서로 구성된 1:1 웹 화면을 구현합니다. 검색 결과의 페이지 이동, 문구 하이라이트, 확대·축소를 제공합니다.
+- **SQLite·SSE**: SQLite는 대화·작업 결과·제품 선택 대기를 저장합니다. SSE는 오래 걸리는 검색의 진행 상태와 완료 결과를 전달하며, 새로고침 후 기존 작업에 재연결합니다.
+- **pytest·Playwright**: Python 모듈·API와 브라우저의 동의·제품 선택·대화 복원·원문 표시·하이라이트 흐름을 검사합니다. 자동 테스트의 합성 자료는 테스트에만 사용합니다.
+- **NVIDIA SkillSpector — 개발용 선택 도구**: 별도 설치 후 `scripts/scan-skills.sh`의 `--no-llm` 정적 검사로 커스텀 스킬을 점검합니다. 웹 실행 의존성이나 검색 중 호출하는 서비스가 아니며, 실행한 검사 범위와 결과는 [검증 기록](docs/validation.md)에 구분합니다.
+
+**LLM이 작성한 최종 문장은 결과에 사용하지 않습니다.** 애플리케이션이 원문 구간과 근거 ID를 검증해 직접 반환하며 질병·실제 보험금 지급 여부를 추정하지 않습니다. 식약처 조회는 실시간 공식 API를 사용하는 별도 Python 도구이며 NIM이 성분 정보를 생성하는 구조가 아닙니다. 사용자 상황·관련 대화·검색 후보·약관 발췌문과 제품 근거는 동의 후 추론에 사용될 수 있습니다.
+
+공식 문서와 코드 연결은 [NVIDIA 연결 상태](docs/nvidia-stack.md), 모듈별 책임은 [모듈 정의](docs/module-definition.md)에 정리했습니다. NemoClaw·OpenShell 실행 환경, 별도 NeMo Guardrails 서비스, 파인튜닝은 현재 런타임에 포함하지 않습니다.
 
 ## 실행
 
@@ -104,6 +120,45 @@ NeMo Microservices SDK는 서비스에 접속하는 클라이언트입니다. SD
 
 ## 조건부 성분 근거 에이전트
 
+다음은 모델이 선택하는 작업과 코드가 종료하는 지점을 구분한 실행 흐름입니다.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant W as NAT 상위 워크플로
+    participant A as NAT 성분 에이전트
+    participant T as Python·식약처 도구
+    W->>W: 입력 추출 · 원문 대조
+    alt 명시된 약품명 또는 선택 품목이 있음
+        W->>A: 성분 조사 요청
+        opt 아직 선택하지 않은 약품명이 있음
+            loop 각 미선택 약품명
+                A->>T: lookup_products
+                T-->>A: 공식 제품 후보
+            end
+            A->>A: 코드가 finish_evidence 실행
+            A-->>W: 후보 반환 · 에이전트 종료
+            W-->>U: 체크포인트 저장 · 제품 선택 요청
+            U->>W: 제품 선택 · NVIDIA 전송 재동의
+            W->>A: 저장된 입력으로 성분 조사 재개
+        end
+        loop 선택한 각 품목
+            A->>T: inspect_product
+            Note over T: 최신 상세정보의 성분과<br/>모든 가용 허가문서를 함께 검증
+            T-->>A: 통합 관찰 결과 · 출처
+        end
+        A->>A: 코드가 근거 재검증 · finish_evidence
+        Note over A: 종료를 위한 추가 NIM 호출 없음
+        A-->>W: 공식 근거 반환 · 에이전트 종료
+    else 약품 정보가 없음
+        Note over W: 성분 조사와 식약처 조회 생략
+    end
+    W->>W: 약관 검색 ReAct · 원문 검증
+    W-->>U: SSE 완료 결과 · 원문 표시
+```
+
+제품 후보가 없으면 미확인 상태를 표시하고, 조회·검증 오류가 발생하면 실패로 처리합니다. 위 재개 경로는 사용자가 선택·동의했을 때만 실행하며 완료된 입력 추출과 후보 조회를 반복하지 않습니다. **코드의 자동 종료는 성분 에이전트에 적용됩니다.** 약관 검색은 계속 모델의 검색·문맥 조회·종료 도구 선택을 사용하는 자체 ReAct 루프입니다.
+
 NAT 워크플로 안에 `drug_evidence_agent`를 별도 함수로 등록하고 NVIDIA NAT의 내장 `tool_calling_agent`로 실행합니다. `nvidia-nat[langchain]` 의존성은 `uv sync --extra dev`로 함께 설치됩니다. 모델은 기존 NeMo Microservices SDK의 Nemotron 연결을 사용하므로 추가 키는 필요하지 않습니다.
 
 - 사용자가 명시한 약품명이 입력 확인 단계에서 추출되거나, 사용자가 공식 품목을 선택한 경우에만 호출합니다. 약품명은 현재 입력·확인 항목 또는 관련된 이전 사용자 발화에 근거해야 합니다. 약관에만 있는 약품명은 호출 근거가 아닙니다.
@@ -146,7 +201,7 @@ NAT 워크플로 안에 `drug_evidence_agent`를 별도 함수로 등록하고 N
 | `nat.py` | 등록된 NAT workflow에서 Python 에이전트를 직접 실행 |
 | `agent.py`, `agents/` | 명시 정보 추출 → 제품 근거 → ReAct 검색/문맥 → 보장 항목 연결 → 원문 검증 |
 | `pdf.py`, `python/pdf_worker.py` | 제한 시간·취소가 있는 별도 프로세스, 문자 좌표 추적, 원문 검증, 표준 주석 |
-| `skills_cli.py`, `skills/` | 세 도구의 JSON 입출력 CLI와 skills.sh 호환 지침 |
+| `skills_cli.py`, `skills/` | 성분 조회·PDF 처리 두 도구의 JSON CLI와 상위 원문 처리 `SKILL.md` 지침 |
 | `public/` | 1:1 split PDF.js 화면 |
 
 ReAct의 모델 출력은 허용된 도구와 ID를 고르는 데만 사용합니다. 자유롭게 생성한 최종 답변은 폐기하고, 애플리케이션이 PDF의 source span을 직접 반환합니다. 검색과 인용은 원문 언어로 처리합니다. 원문 계산·주석 같은 결정적인 작업에는 모델을 사용하지 않습니다. 의약품 근거는 식약처 구조화 성분 필드와 설명서의 명시적 문장에서만 추출합니다. 성분 연결 파서는 명시적인 전구약물→활성 대사물 전환 문장과 용법·용량의 성분 기준 표현(`성분명으로서/로서 + 용량`)을 지원합니다. 후자의 검색어는 해당 제품의 구조화 성분명에도 실제로 포함되어야 합니다. 효능·효과가 XML 제목 속성에 들어 있는 경우도 원문과 위치를 보존합니다. 용법·용량 인용은 성분 연결 근거이며 복용 안내가 아닙니다. 표현을 인식하지 못하면 염 이름을 임의로 지우거나 같은 성분이라고 추정하지 않습니다.
