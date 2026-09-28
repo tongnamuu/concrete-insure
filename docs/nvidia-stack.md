@@ -1,6 +1,6 @@
 # NVIDIA 연결 상태
 
-실행 버전은 `pyproject.toml`의 고정 의존성을 기준으로 합니다. 사용자 입력부터 결과 표시까지의 구조도와 전체 기술 목록은 [README](../README.md#사용자-입력부터-nvidia-연동까지)에 있습니다.
+실행 버전은 `pyproject.toml`의 고정 의존성을 기준으로 합니다. 사용자 입력부터 결과 표시까지의 구조도와 핵심 기술 목록은 [README](../README.md#사용자-입력부터-nvidia-연동까지)에 있습니다.
 
 - **Nemotron 3.5 Lightning 30B A3B**: 기본 모델은 `nvidia/nemotron-3.5-lightning-30b-a3b`입니다. 명시된 검색어·약품명 추출과 허용 도구·ID 선택을 담당합니다.
 - **NVIDIA hosted NIM**: 위 모델을 실행하는 추론 서비스입니다. 공통 SDK 클라이언트로 구조화 JSON과 함수 도구 호출을 요청합니다.
