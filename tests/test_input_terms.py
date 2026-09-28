@@ -76,3 +76,42 @@ async def test_runtime_input_understanding_never_substitutes_literal_extraction(
         async def chat(self,messages,**kwargs):raise AppError('NIM_TIMEOUT')
     with pytest.raises(AppError,match='NIM_TIMEOUT'):
         await understand_input_with_model({'query':'독감','cloudConsent':True},Failure())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('description,selected',[
+    ('가상 사례: 횡단보도를 걷던 보행자에게 오토바이가 부딪혔습니다.', ['횡단보도','보행자','오토바이']),
+    ('가상 사례: 자전거를 타다가 미끄러졌습니다. 운전자보험 약관을 확인하고 싶어요.', ['자전거','미끄러졌','운전자보험']),
+    ('가상 사례: 위층 배관 누수로 천장이 젖었습니다.', ['배관','누수','천장']),
+])
+async def test_nonmedical_narratives_keep_explicit_terms_and_original_statement(description, selected):
+    import json
+    class Nim:
+        enabled=True
+        async def chat(self,messages,**kwargs):
+            data=json.loads(messages[-1]['content'])
+            assert data=={'query':'','description':description,'confirmedTerms':[]}
+            return json.dumps({'terms':selected},ensure_ascii=False)
+    result=await understand_input_with_model({'description':description,'cloudConsent':True},Nim())
+    assert result=={'query':'','description':description,'terms':selected,'drugNames':[]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('invented',['운전자','골절','가해자','피해자','교통사고','운전자보험','부딪힘'])
+async def test_accident_input_rejects_unstated_roles_injuries_and_normalized_terms(invented):
+    import json
+    class Nim:
+        enabled=True
+        async def chat(self,messages,**kwargs):return json.dumps({'terms':[invented]},ensure_ascii=False)
+    with pytest.raises(AppError,match='UNGROUNDED_TERM'):
+        await understand_input_with_model({'description':'가상 사례: 횡단보도에서 오토바이와 부딪혔습니다.','cloudConsent':True},Nim())
+
+
+@pytest.mark.asyncio
+async def test_accident_verb_rewrite_fails_even_with_other_valid_terms():
+    class Nim:
+        enabled=True
+        async def chat(self,messages,**kwargs):
+            return '{"terms":["횡단보도","오토바이","부딪힘"]}'
+    with pytest.raises(AppError,match='UNGROUNDED_TERM'):
+        await understand_input_with_model({'description':'가상 사례: 횡단보도에서 오토바이가 부딪혔습니다.','cloudConsent':True},Nim())

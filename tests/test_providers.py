@@ -83,7 +83,7 @@ async def test_provider_status_errors_do_not_leak_body(status, error):
     try:
         with pytest.raises(AppError, match=error) as exc:
             await provider.chat([])
-        assert 'secret' not in str(exc.value) and count == 1
+        assert 'secret' not in str(exc.value) and count == (2 if status >= 500 else 1)
     finally:
         await provider.close()
 
@@ -223,9 +223,9 @@ async def test_input_uses_explicit_schema_and_preserves_source_validation():
 
 
 @pytest.mark.asyncio
-async def test_input_deadline_cancels_sdk_without_retry_or_local_search(monkeypatch):
+async def test_input_deadline_retries_once_without_local_search(monkeypatch):
     from insurelens.agents import input as input_agent
-    assert input_agent.INPUT_TIMEOUT_SECONDS == 25
+    assert input_agent.INPUT_TIMEOUT_SECONDS == 300
     monkeypatch.setattr(input_agent, 'INPUT_TIMEOUT_SECONDS', .02)
     cancelled = asyncio.Event()
     count = 0
@@ -240,6 +240,6 @@ async def test_input_deadline_cancels_sdk_without_retry_or_local_search(monkeypa
     try:
         with pytest.raises(AppError, match='NIM_TIMEOUT'):
             await input_agent.understand_input_with_model({'query': '조플루자', 'cloudConsent': True}, provider)
-        assert count == 1 and cancelled.is_set()
+        assert count == 2 and cancelled.is_set()
     finally:
         await provider.close()

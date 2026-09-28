@@ -214,3 +214,22 @@ async def test_nim_timeout_remains_failed_without_local_recovery(tmp_path):
         assert "local_recovery" not in events and "로컬" not in events
         assert "event: completed" not in events
         assert nim.calls == ["chat"]
+
+
+async def test_failed_case_file_deletion_keeps_records_for_retry(web, monkeypatch):
+    import shutil
+    app, client = web
+    case = (await client.post('/api/cases')).json()['id']
+    await upload(client, case)
+    original = shutil.rmtree
+    def fail_delete(*args, **kwargs):
+        raise PermissionError('test-only')
+    monkeypatch.setattr(shutil, 'rmtree', fail_delete)
+    response = await client.delete(f'/api/cases/{case}')
+    assert response.status_code == 500 and response.json()['error'] == 'CASE_DELETE_FAILED'
+    assert (await client.get(f'/api/cases/{case}')).status_code == 200
+    assert (app.state.store.root / case).exists()
+    monkeypatch.setattr(shutil, 'rmtree', original)
+    assert (await client.delete(f'/api/cases/{case}')).status_code == 204
+    assert (await client.get(f'/api/cases/{case}')).status_code == 404
+    assert not (app.state.store.root / case).exists()

@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException
 
-from .core import AppError, DrugLookupRequest, QueryRequest, ensure
+from .core import AppError, DrugLookupRequest, QueryRequest, ResumeSelectionRequest, ensure
 from .pdf import pdf_operation
 from .store import Queue, Store
 from .nat import configured_investigation
@@ -215,6 +215,18 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
     async def get_case(identifier: UUID, request: Request):
         return public_case(case_for(identifier, request))
 
+    @app.get("/api/cases/{identifier}/conversation")
+    async def get_conversation(identifier: UUID, request: Request):
+        case = case_for(identifier, request)
+        return app.state.store.conversation(case['id'], case['document']['id']) if case['document'] else {"id": None, "turns": []}
+
+    @app.post("/api/cases/{identifier}/conversation", status_code=201)
+    async def new_conversation(identifier: UUID, request: Request):
+        case = case_for(identifier, request)
+        ensure(case['document'], "DOCUMENT_REQUIRED", 409)
+        ensure(all(j['state'] not in ('queued','running') for j in app.state.store.jobs(case['id'])), "CASE_BUSY", 429)
+        return app.state.store.new_conversation(case['id'], case['document']['id'])
+
     @app.delete("/api/cases/{identifier}", status_code=204)
     async def remove_case(identifier: UUID, request: Request):
         case = case_for(identifier, request)
@@ -222,8 +234,14 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
         app.state.deleting.add(case["id"])
         try:
             await app.state.queue.cancel_case(case["id"])
+            try:
+                shutil.rmtree(root / case["id"])
+            except FileNotFoundError:
+                pass
+            except OSError:
+                # Preserve the case pointer so a failed cleanup can be retried.
+                raise AppError('CASE_DELETE_FAILED', 500) from None
             app.state.store.remove(case["id"])
-            shutil.rmtree(root / case["id"], ignore_errors=True)
         finally:
             app.state.deleting.discard(case["id"])
         return Response(status_code=204)
@@ -320,6 +338,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
     @app.post("/api/cases/{identifier}/drugs")
     async def lookup_drug(identifier: UUID, request: Request, body: DrugLookupRequest):
         case = case_for(identifier, request)
+        ensure(drugs.enabled, "MFDS_KEY_REQUIRED", 409)
         result = await drugs.lookup(body.name)
         # Read again after awaiting the provider to avoid losing concurrent results.
         products = case_for(identifier, request)["products"]
@@ -336,13 +355,95 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
         ensure(body.cloudConsent, "NIM_CONSENT_REQUIRED", 409)
         ensure(all(i in case["products"] for i in body.drugIds), "DRUG_SELECTION_REQUIRED")
         products = [case["products"][i] for i in body.drugIds]
-        job_id = app.state.store.create_job(case["id"], "investigation", case["document"]["id"])
+        store = app.state.store
+        ensure(all(j['state'] not in ('queued','running') for j in store.jobs(case['id'])), "CASE_BUSY", 429)
+        context = None
+        if body.conversationId:
+            from insurelens.conversation import model_context
+            conversation = store.conversation(case['id'], case['document']['id'])
+            ensure(conversation['id'] == body.conversationId, "CONVERSATION_CHANGED", 409)
+            ensure(len(conversation['turns']) < 50, "CONVERSATION_TURN_LIMIT", 429)
+            context = model_context(conversation['turns'])
+        job_id = store.create_job(case["id"], "investigation", case["document"]["id"])
+        if body.conversationId:
+            store.add_turn(body.conversationId, job_id, body.model_dump())
 
         async def run(emit):
-            return await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, emit=emit, operation=pdf)
+            saved_facts = None
+            def on_selection(facts):
+                nonlocal saved_facts
+                saved_facts = facts
+            result = await investigate(document=case["document"], request=body.model_dump(), products=products, nim=nim, drugs=drugs, emit=emit, operation=pdf, on_selection=on_selection, **({'conversation': context} if context is not None else {}))
+            if result.get('requiresDrugSelection'):
+                candidates = case_for(identifier, request)['products']
+                candidates.update({p['id']: p for p in result['products']})
+                ensure(len(candidates) <= 300, 'DRUG_RESULT_LIMIT', 429)
+                store.set_products(case['id'], candidates)
+                from .selection import selection_snapshot
+                snapshot = selection_snapshot(facts=saved_facts, request=body.model_dump(), conversation=context,
+                                              products=products + result['products'], document=case['document'])
+                store.save_selection(job_id, case['id'], case['document']['id'], body.conversationId, snapshot)
+            return result
 
         app.state.queue.add(job_id, run)
         return {"jobId": job_id}
+
+    @app.post("/api/jobs/{identifier}/resume", status_code=202)
+    async def resume_selection(identifier: UUID, request: Request, body: ResumeSelectionRequest):
+        from .selection import selection_snapshot, validate_saved_facts
+        from .conversation import model_context
+        store = app.state.store
+        source = store.job(str(identifier), request.state.owner)
+        case = case_for(source['caseId'], request)
+        ensure(body.cloudConsent, 'NIM_CONSENT_REQUIRED', 409)
+        ensure(nim.enabled, 'NVIDIA_KEY_REQUIRED', 409)
+        ensure(source['kind'] == 'investigation' and source['state'] == 'completed' and
+               (source['result'] or {}).get('requiresDrugSelection'), 'SELECTION_EXPIRED', 409)
+        ensure(case['document'] and source['documentId'] == case['document']['id'], 'SELECTION_EXPIRED', 409)
+        conversation = store.conversation(case['id'], case['document']['id'])
+        checkpoint = store.selection(source['id'])
+        if checkpoint is None:
+            # Migrate legacy pending turns from their stored, already-grounded fields.
+            # No new inference or client-supplied text is used to reconstruct them.
+            ensure(conversation['turns'] and conversation['turns'][-1]['jobId'] == source['id'], 'SELECTION_EXPIRED', 409)
+            turn = conversation['turns'][-1]
+            original = QueryRequest(query=turn['query'], description=turn['description'], confirmedTerms=turn['confirmedTerms'],
+                                    conversationId=conversation['id']).model_dump()
+            facts = {'query': turn['query'], 'description': turn['description'],
+                     'terms': source['result'].get('terms'), 'drugNames': source['result'].get('drugNames')}
+            snapshot = selection_snapshot(facts=facts, request=original, conversation=model_context(conversation['turns'][:-1]),
+                                          products=source['result']['products'], document=case['document'])
+            store.save_selection(source['id'], case['id'], source['documentId'], conversation['id'], snapshot)
+            checkpoint = store.selection(source['id'])
+        current_id = checkpoint['resume_job_id'] or source['id']
+        ensure(checkpoint['case_id'] == case['id'] and checkpoint['document_id'] == case['document']['id'], 'SELECTION_EXPIRED', 409)
+        if checkpoint['conversation_id']:
+            ensure(conversation['id'] == checkpoint['conversation_id'] and conversation['turns'] and
+                   conversation['turns'][-1]['jobId'] == current_id, 'SELECTION_EXPIRED', 409)
+        else:
+            investigations = [j for j in store.jobs(case['id']) if j['kind'] == 'investigation']
+            ensure(not conversation['id'] and investigations and investigations[0]['id'] == current_id, 'SELECTION_EXPIRED', 409)
+        snapshot = checkpoint['payload']
+        ensure(snapshot['version'] == 1 and snapshot['documentHash'] == case['document'].get('hash', case['document'].get('documentHash')),
+               'SELECTION_EXPIRED', 409)
+        original = {**snapshot['request'], 'cloudConsent': True, 'drugIds': body.drugIds}
+        validate_saved_facts(snapshot['facts'], original, snapshot['conversation'])
+        ensure(all(i in snapshot['products'] for i in body.drugIds), 'DRUG_SELECTION_REQUIRED', 409)
+        products = [snapshot['products'][i] for i in body.drugIds]
+        ensure(all(any(n.casefold() in p['name'].casefold() for p in products) for n in snapshot['facts']['drugNames']),
+               'DRUG_SELECTION_INCOMPLETE', 409)
+        ensure(all(j['state'] not in ('queued', 'running') or j['id'] == current_id for j in store.jobs(case['id'])), 'CASE_BUSY', 429)
+        job_id, created = store.resume_selection(checkpoint, body.drugIds)
+        if created:
+            async def continue_run(emit):
+                record('job.resumed')
+                result = await investigate(document=case['document'], request=original, products=products,
+                                           nim=nim, drugs=drugs, emit=emit, operation=pdf,
+                                           conversation=snapshot['conversation'], resume_facts=snapshot['facts'])
+                ensure(not result.get('requiresDrugSelection'), 'DRUG_SELECTION_INCOMPLETE', 409)
+                return result
+            app.state.queue.add(job_id, continue_run)
+        return {'jobId': job_id}
 
     @app.get("/api/jobs/{identifier}")
     async def job(identifier: UUID, request: Request):

@@ -1,3 +1,4 @@
+import {ready,emptySession} from './browser-session-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
@@ -12,13 +13,14 @@ execFileSync(python,['-c',"import pymupdf as f,sys; d=f.open();p=d.new_page();p.
 const server=await startPythonTestServer(path.join(temp,'data'));
 const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})}).catch(async error=>{await server.close();await rm(temp,{recursive:true,force:true});throw error;});
 const page=await browser.newPage({viewport:{width:1280,height:900}});
+page.setDefaultTimeout(15000);
 const requests=[],ocr=[],errors=[];
 page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/investigations'))requests.push(r.postDataJSON());if(r.method()==='POST'&&r.url().endsWith('/ocr'))ocr.push(r.url());});
 page.on('pageerror',e=>errors.push(e.message));
-const consentText='NVIDIA 서비스로 질문·상황 설명·검색 후보·약관 발췌문 또는 처방 이미지를 전송하는 데 동의합니다.';
-async function unchangedJobs(count){const id=await page.evaluate(()=>localStorage.getItem('insure-lens-case'));const response=await page.request.get(`${server.base}/api/cases/${id}`);assert.equal((await response.json()).jobs.filter(j=>j.kind==='investigation').length,count);}
+const consentText='NVIDIA 서비스로 현재·이전 대화의 질문·상황 설명·검색 후보·약관 발췌문 또는 처방 이미지를 전송하는 데 동의합니다. 의약품 조회 시 약품명과 품목코드는 식품의약품안전처 API로 전송됩니다.';
+async function unchangedJobs(count){const id=await page.evaluate(()=>sessionStorage.getItem('insure-lens-case'));const response=await page.request.get(`${server.base}/api/cases/${id}`);assert.equal((await response.json()).jobs.filter(j=>j.kind==='investigation').length,count);}
 try{
- await page.goto(server.base);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
+ await page.goto(server.base);await ready(page);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
  await expect(page.locator('.settings')).toHaveCount(0);await expect(page.locator('#translation')).toHaveCount(0);
  await page.locator('#query').fill('독감');await page.locator('#send').click();
  await expect(page.locator('#consentDialog')).toBeVisible();await expect(page.locator('#consentDialog label')).toHaveText(consentText);await expect(page.locator('#cloudConsent')).not.toBeChecked();await expect(page.locator('#confirmConsent')).toBeDisabled();
@@ -27,11 +29,11 @@ try{
  await unchangedJobs(0);assert.equal(requests.length,0);await expect(page.locator('.user-message,.investigation-result')).toHaveCount(0);
  if(process.env.SCREENSHOT)await page.screenshot({path:process.env.SCREENSHOT});
  await page.keyboard.press('Escape');await expect(page.locator('#consentDialog')).not.toBeVisible();await expect(page.locator('#query')).toHaveValue('독감');
- await page.locator('#description').fill('독감 진단을 받았습니다.');await page.locator('#searchDescription').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cloudConsent').check();await page.locator('#cloudConsent').uncheck();await expect(page.locator('#confirmConsent')).toBeDisabled();await page.locator('#cancelConsent').click();await unchangedJobs(0);assert.equal(requests.length,0);
+ await page.locator('#query').fill('독감 진단을 받았습니다.');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cloudConsent').check();await page.locator('#cloudConsent').uncheck();await expect(page.locator('#confirmConsent')).toBeDisabled();await page.locator('#cancelConsent').click();await unchangedJobs(0);assert.equal(requests.length,0);
  await page.locator('#query').press('Control+Enter');await expect(page.locator('#consentDialog')).toBeVisible();await page.locator('#cancelConsent').click();assert.equal(requests.length,0);
  await page.locator('#send').click();await acceptConsent(page);await expect(page.locator('.investigation-result')).toHaveCount(1,{timeout:30000});assert.equal(requests.length,1);assert.equal(requests[0].cloudConsent,true);assert.equal(requests[0].translation,false);
  await page.locator('#query').fill('인플루엔자');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cancelConsent').click();await unchangedJobs(1);assert.equal(requests.length,1);await expect(page.locator('.investigation-result')).toHaveCount(1);
  await page.locator('#medicalFile').setInputFiles(pdf);await expect(page.locator('#consentDialog')).toBeVisible();await page.locator('#cancelConsent').click();assert.equal(ocr.length,0);
- await page.reload();await expect(page.locator('#documentName')).toHaveText('policy.pdf');await page.locator('#query').fill('독감');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cancelConsent').click();assert.equal(requests.length,1);assert.deepEqual(errors,[]);
+ await page.reload();await emptySession(page);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});await page.locator('#query').fill('독감');await page.locator('#send').click();await expect(page.locator('#cloudConsent')).not.toBeChecked();await page.locator('#cancelConsent').click();assert.equal(requests.length,1);await page.locator('.drug-section summary').click();await page.locator('#drugName').fill('시험약');await page.locator('#drugForm button').click();await expect(page.locator('#error')).toContainText('식약처 API 키');await expect(page.locator('#error')).toContainText('README');assert.deepEqual(errors,[]);
  console.log(JSON.stringify({ok:true,uncheckedBlocked:true,cancelBlocked:true,shortcutBlocked:true,freshConsentEachSearch:true,noRequestOrResultBeforeConsent:true,ocrCancelBlocked:true,reloadDoesNotRememberConsent:true,browserErrors:errors}));
 }finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

@@ -109,3 +109,37 @@ async def test_task_cancellation_propagates_without_search():
         async def chat(self,messages,model=None,**kwargs):raise asyncio.CancelledError()
     async def no_pdf(payload):pytest.fail('cancelled task must stop')
     with pytest.raises(asyncio.CancelledError):await run(Cancelled([]),op=no_pdf)
+
+
+@pytest.mark.asyncio
+async def test_accident_description_without_medical_data_uses_nat_and_real_pdf(tmp_path):
+    import pymupdf
+    from insurelens.nat import configured_investigation
+    from insurelens.pdf import pdf_operation
+    from tests.nim_fixture import ScriptedNim
+    description='가상 사례: 횡단보도를 걷던 보행자에게 오토바이가 부딪혔습니다.'
+    class AccidentNim(ScriptedNim):
+        async def chat(self,messages,**kwargs):
+            assert json.loads(messages[-1]['content'])['description']==description
+            return json.dumps({'terms':['횡단보도','오토바이']},ensure_ascii=False)
+    pdf,index=tmp_path/'policy.pdf',tmp_path/'index.json.gz'
+    original='테스트용 가상 약관: 횡단보도에서 오토바이와 충돌한 경우의 조건입니다.'
+    document=pymupdf.open()
+    document.new_page().insert_text((50,70),original,fontname='korea',fontsize=10)
+    document.save(pdf)
+    document.close()
+    await pdf_operation({'op':'index','pdf':str(pdf),'index':str(index)})
+    nim=AccidentNim()
+    result=await configured_investigation(document={'pdf':str(pdf),'index':str(index),'pages':1},request={'description':description,'cloudConsent':True},nim=nim)
+    assert result['mode']=='nim-react' and result['terms']==['횡단보도','오토바이']
+    assert result['quotes'] and result['references']==[] and result['mappings']==[]
+    assert all(hit['quote']==original+'\n' for hit in result['quotes'])
+    assert all(hit['segments'] for hit in result['quotes'])
+    assert result['coverage']['status']=='unresolved'  # A match alone proves no payable benefit.
+    assert 'answer' not in result and 'diagnosis' not in result
+    assert nim.calls.count('complete')>=2
+    annotated=tmp_path/'annotated.pdf'
+    await pdf_operation({'op':'annotate','pdf':str(pdf),'index':str(index),'hits':result['quotes'],'output':str(annotated)})
+    with pymupdf.open(annotated) as marked:
+        assert all(annotation.info['content']==original+'\n' for annotation in marked[0].annots())
+        assert len(list(marked[0].annots()))>0

@@ -14,10 +14,15 @@ from .core import AppError
 
 _context = ContextVar('insurelens_diagnostics', default={})
 EVENTS = {'app.started', 'app.stopped', 'request.completed', 'request.error',
-          'job.queued', 'job.started', 'job.stage', 'job.finished',
+          'job.queued', 'job.started', 'job.stage', 'job.finished', 'job.resumed',
           'operation.started', 'operation.completed', 'operation.failed',
-          'operation.cancelled', 'provider.response'}
+          'operation.cancelled', 'provider.response', 'provider.retry', 'agent.routed', 'agent.tool', 'agent.completed'}
 ENUMS = {
+    'agent': {'drug_evidence'},
+    'decision': {'invoke', 'skip'},
+    'reason': {'selected_product', 'explicit_drug_name', 'no_drug_information'},
+    'tool': {'lookup_products', 'inspect_ingredients', 'inspect_label', 'finish_evidence'},
+    'status_name': {'needs_selection', 'ready', 'unresolved'},
     'category': {'nim', 'ocr', 'mfds', 'pdf'},
     'operation': {'chat', 'tools', 'http', 'index', 'search', 'context', 'sections', 'annotate', 'unknown'},
     'stage': {'input', 'translation', 'planning', 'retrieval', 'drug_reference', 'policy_scope', 'verification', 'document', 'ocr'},
@@ -31,10 +36,10 @@ ROUTES = {'/', '/vendor/pdfjs', '/api/config', '/api/cases', '/api/cases/{identi
           '/api/cases/{identifier}/documents', '/api/cases/{identifier}/ocr',
           '/api/cases/{identifier}/drugs', '/api/cases/{identifier}/pdf',
           '/api/cases/{identifier}/investigations', '/api/jobs/{identifier}',
-          '/api/jobs/{identifier}/cancel', '/api/jobs/{identifier}/events',
+          '/api/jobs/{identifier}/cancel', '/api/jobs/{identifier}/resume', '/api/jobs/{identifier}/events',
           '/api/jobs/{identifier}/annotated.pdf'}
-NUMBERS = {'duration_ms', 'wait_ms', 'elapsed_seconds', 'timeout_seconds', 'status',
-           'prompt_tokens', 'completion_tokens', 'total_tokens'}
+NUMBERS = {'steps', 'duration_ms', 'wait_ms', 'elapsed_seconds', 'timeout_seconds', 'status',
+           'prompt_tokens', 'completion_tokens', 'total_tokens', 'attempt', 'max_attempts', 'delay_seconds'}
 
 
 def safe_fields(fields):
