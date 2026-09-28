@@ -78,7 +78,7 @@ The latest user request permits identifying an explicitly documented policy bene
 
 ## Consent at submission
 
-The web app opens a modal containing only the NVIDIA transfer consent statement and consent/cancel controls on each search submission and product-selection continuation, including description-only and keyboard submissions. The checkbox starts unchecked every time and is not stored. Only an explicit checkbox selection and confirmation submit cloudConsent:true. Cancel, Escape or unchecked submission send no investigation request and create no new result. Prescription uploads use the same transfer gate. The web app exposes no additional processing/translation options; translation is false for web investigations. Existing strict server guards reject missing/false consent before creating a job or invoking NIM.
+The web app opens a modal containing only the NVIDIA transfer consent statement and consent/cancel controls on each search submission and product-selection continuation, including description-only and keyboard submissions. The checkbox starts unchecked every time and is not stored. Only an explicit checkbox selection and confirmation submit cloudConsent:true. Cancel, Escape or unchecked submission send no investigation request and create no new result. Prescription uploads use the same transfer gate. The web app exposes no additional processing/translation options; web requests omit the translation flag and the server defaults it to false. Optional image OCR and API-only translation configuration are described in [optional-features.md](optional-features.md). Existing strict server guards reject missing/false consent before creating a job or invoking NIM.
 
 
 ## Conversation context

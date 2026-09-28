@@ -28,7 +28,7 @@ Nemotron/NIM: AsyncNeMoMicroservices.chat.completions.create using native tool_c
 
 MFDS: official DrugPrdtPrmsnInfoService08 with getDrugPrdtPrmsnInq08, getDrugPrdtPrmsnDtlInq08 and conditional getDrugPrdtMcpnDtlInq08. A separately issued MFDS_API_KEY is required; see README for application and restart instructions. The public Swagger on data.go.kr as retrieved2026-09-27 names this v08 endpoint. Decoder preserves ITEM_INGR_NAME; no unsourced salt removal, brand alias or code-to-disease conversion. Product selection is explicit. Main-ingredient string equality or a quote match is never labelled medically/contractually suitable. Disease codes are searched literally; no KCD meanings are invented.
 
-Translation: optional separately configured model supplies English glosses to the supervisor. Original term IDs, user input and quotes remain immutable. Glosses do not become search terms or source evidence. General Korean↔English free-text translation is not lossless, so no automatic round-trip translation of policy is implemented. A lighter model can be configured; it is not presumed faster without benchmark.
+Translation: web investigations omit the translation flag and use the server default of false. Only an API request with translation:true can use a separately configured model to supply English glosses to the supervisor; see [optional-features.md](optional-features.md). Original term IDs, user input and quotes remain immutable. Glosses do not become search terms or source evidence. General Korean↔English free-text translation is not lossless, so no automatic round-trip translation of policy is implemented. A lighter model can be configured; it is not presumed faster without benchmark.
 
 ## Persistence and events
 

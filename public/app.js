@@ -134,7 +134,7 @@ $('queryForm').addEventListener('submit',async e=>{
  try{
   busy(null,'조사를 준비하고 있습니다.');
   if(!state.conversationId){const conversation=await api(`/api/cases/${state.caseId}/conversation`,{method:'POST'});state.conversationId=conversation.id;}
-  const body={query,conversationId:state.conversationId,confirmedTerms:state.confirmed,drugIds:[...state.selected],cloudConsent:true,translation:false};
+  const body={query,conversationId:state.conversationId,confirmedTerms:state.confirmed,drugIds:[...state.selected],cloudConsent:true};
   const {jobId}=await api(`/api/cases/${state.caseId}/investigations`,{method:'POST',body});
   $('query').value='';followJob(jobId);await refreshConversation();$('progress').scrollIntoView({block:'nearest'});
  }catch(e){idle();if(e.code==='CONVERSATION_CHANGED')await refreshCase();fail(e);}
