@@ -7,7 +7,7 @@ export async function emptySession(page){
  await ready(page);
  await expect(page.locator('#documentName')).toHaveText('약관 원문');
  await expect(page.locator('#pdfEmpty')).toBeVisible();
- for(const id of ['pdfPage','progress','error','retryReset'])await expect(page.locator('#'+id)).toBeHidden();
+ for(const id of ['pdfPage','progress','error','retryRestore'])await expect(page.locator('#'+id)).toBeHidden();
  await expect(page.locator('.user-message,.assistant-message,.quote-card,#highlights polygon')).toHaveCount(0);
  for(const id of ['query','drugName','policyFile'])await expect(page.locator('#'+id)).toHaveValue('');
  await expect(page.locator('#download')).toBeDisabled();
@@ -15,4 +15,13 @@ export async function emptySession(page){
  await expect(page.locator('#zoomValue')).toHaveText('100%');
  await expect(page.locator('#cloudConsent')).not.toBeChecked();
  await expect(page.locator('#drugResults')).toBeEmpty();
+}
+
+export async function restoredSession(page){
+ await ready(page);
+ await expect(page.locator('#documentName')).not.toHaveText('약관 원문');
+ await expect(page.locator('#pdfCanvas')).toBeVisible();
+ await expect(page.locator('#progress')).toBeHidden();
+ await expect(page.locator('#retryRestore')).toBeHidden();
+ await expect(page.locator('#cloudConsent')).not.toBeChecked();
 }

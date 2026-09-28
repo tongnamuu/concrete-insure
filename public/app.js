@@ -2,7 +2,7 @@ import * as pdfjs from '/vendor/pdfjs/build/pdf.mjs';
 pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/build/pdf.worker.mjs';
 const $ = id => document.getElementById(id);
 const state = {ready:false,conversationId:null,busy:false,caseId:null,config:{},pdf:null,page:1,zoom:1,hits:[],selected:new Set(),job:null,resultJob:null,stream:null,renderTask:null,renderVersion:0,renderChain:Promise.resolve(),document:null};
-const errors = {SELECTION_EXPIRED:'이전 선택 대기를 이어갈 수 없습니다. 현재 약관과 대화에서 새 질문을 보내 주세요.',SELECTION_STATE_INVALID:'저장된 질문 분석 결과를 복원하지 못했습니다. 새 질문으로 진행해 주세요.',SELECTION_ALREADY_RESUMED:'이미 선택한 제품으로 진행 중이거나 완료된 요청입니다.',DRUG_SELECTION_REQUIRED:'이 질문에서 찾은 제품 후보를 선택해 주세요.',DRUG_SELECTION_INCOMPLETE:'질문에 나온 약품마다 처방받은 제품을 선택해 주세요. 후보가 없으면 정확한 약품명으로 새 질문을 보내 주세요.',AGENT_TIMEOUT:'전체 검색 제한 시간(20분)에 도달했습니다. 다시 시도해 주세요.',MFDS_KEY_REQUIRED:'의약품 조회에는 식약처 API 키가 필요합니다. README의 발급·설정 방법을 확인해 주세요.',MFDS_AUTH_FAILED:'식약처 API 인증 또는 활용 승인을 확인해 주세요.',MFDS_TIMEOUT:'식약처 자료 조회 시간이 초과되었습니다. 다시 시도해 주세요.',MFDS_REQUEST_FAILED:'식약처 자료를 가져오지 못했습니다. 다시 시도해 주세요.',MFDS_RATE_LIMIT:'식약처 API 호출 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.',MFDS_PRODUCT_MISMATCH:'정확한 제품 상세정보를 확인하지 못했습니다. 제품을 다시 선택해 주세요.',CONVERSATION_CHANGED:'다른 탭에서 대화나 약관이 바뀌었습니다. 현재 대화를 확인하고 다시 보내 주세요.',CONVERSATION_TURN_LIMIT:'이 대화의 메시지 한도에 도달했습니다. 새 대화를 시작해 주세요.',CONVERSATION_LIMIT:'대화 한도에 도달했습니다. 자료를 삭제한 뒤 다시 시작해 주세요.',NIM_INCOMPLETE_RESPONSE:'응답이 완성되지 않아 검색을 중단했습니다. 다시 시도해 주세요.',NIM_TIMEOUT:'검색 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',NIM_SERVICE_UNAVAILABLE:'검색 서비스가 일시적으로 응답하지 않습니다.',NIM_MODEL_UNAVAILABLE:'설정된 검색 모델을 사용할 수 없습니다. 모델 설정과 접근 권한을 확인해 주세요.',NIM_AUTH_FAILED:'검색 서비스의 인증 설정과 접근 권한을 확인해 주세요.',NIM_RATE_LIMIT:'검색 서비스의 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.',NO_EXPLICIT_TERMS:'검색할 구체적인 정보를 찾지 못했습니다. 사고 상황·장소·차량, 진단명·약품명 또는 찾고 싶은 약관 표현을 적어 주세요.',PDF_PAGE_LIMIT:'약관은 최대 1,000페이지까지 올릴 수 있습니다.',PDF_TEXT_LIMIT:'약관은 최대 200만 자까지 처리할 수 있습니다.',PDF_SIZE_LIMIT:'약관은 최대 20 MB까지 올릴 수 있습니다.',ENCRYPTED_PDF:'암호로 잠긴 PDF입니다. 암호를 해제한 사본을 올려 주세요.',PDF_RUNTIME_MISSING:'PDF 처리 프로그램이 아직 설치되지 않았습니다. 실행 가이드의 PDF 설치 단계를 확인해 주세요.',PROVIDER_UNAVAILABLE:'외부 서비스에 연결하지 못했습니다. 연결 설정을 확인하고 다시 시도해 주세요.',PROVIDER_REQUEST_FAILED:'외부 서비스 요청이 실패했습니다. API 설정과 이용 한도를 확인해 주세요.',DOCUMENT_REQUIRED:'먼저 보험약관 PDF를 올려 주세요.',NIM_CONSENT_REQUIRED:'NVIDIA 자료 전송에 동의해야 검색을 진행할 수 있습니다.',TEXT_LAYER_REQUIRED:'이 약관에는 검색 가능한 문자 정보가 없습니다. 텍스트가 있는 약관 PDF를 올려 주세요.',CASE_BUSY:'이 자료에서 진행 중인 작업이 있습니다. 완료 후 다시 시도해 주세요.',NVIDIA_KEY_REQUIRED:'검색 서비스의 인증 설정이 필요합니다.',NAT_RUNTIME_MISSING:'검색 기능을 실행하는 데 필요한 프로그램 설치를 확인해 주세요.',NIM_NOT_CONFIGURED:'검색 모델 연결 설정이 필요합니다.',MFDS_NOT_CONFIGURED:'공식 의약품 조회 서비스가 아직 설정되지 않았습니다.',PDF_TIMEOUT:'문서 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',CASE_NOT_FOUND:'이 자료는 만료되었거나 삭제되었습니다. 다시 업로드해 주세요.',NO_DOCUMENT:'먼저 보험약관 PDF를 올려 주세요.',PDF_TOO_MANY_PAGES:'약관은 최대 1,000페이지까지 올릴 수 있습니다.',PDF_TOO_MUCH_TEXT:'약관의 텍스트가 처리 한도를 넘었습니다.',FILE_TOO_LARGE:'파일이 너무 큽니다. 약관은 20 MB까지 올릴 수 있습니다.',ABORTED:'작업이 취소되었습니다.'};
+const errors = {SERVER_RESTARTED:'서버가 다시 시작되어 진행 중이던 요청을 완료하지 못했습니다. 내용을 확인한 뒤 다시 보내 주세요.',SELECTION_EXPIRED:'이전 선택 대기를 이어갈 수 없습니다. 현재 약관과 대화에서 새 질문을 보내 주세요.',SELECTION_STATE_INVALID:'저장된 질문 분석 결과를 복원하지 못했습니다. 새 질문으로 진행해 주세요.',SELECTION_ALREADY_RESUMED:'이미 선택한 제품으로 진행 중이거나 완료된 요청입니다.',DRUG_SELECTION_REQUIRED:'이 질문에서 찾은 제품 후보를 선택해 주세요.',DRUG_SELECTION_INCOMPLETE:'질문에 나온 약품마다 처방받은 제품을 선택해 주세요. 후보가 없으면 정확한 약품명으로 새 질문을 보내 주세요.',AGENT_TIMEOUT:'전체 검색 제한 시간(20분)에 도달했습니다. 다시 시도해 주세요.',MFDS_KEY_REQUIRED:'의약품 조회에는 식약처 API 키가 필요합니다. README의 발급·설정 방법을 확인해 주세요.',MFDS_AUTH_FAILED:'식약처 API 인증 또는 활용 승인을 확인해 주세요.',MFDS_TIMEOUT:'식약처 자료 조회 시간이 초과되었습니다. 다시 시도해 주세요.',MFDS_REQUEST_FAILED:'식약처 자료를 가져오지 못했습니다. 다시 시도해 주세요.',MFDS_RATE_LIMIT:'식약처 API 호출 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.',MFDS_PRODUCT_MISMATCH:'정확한 제품 상세정보를 확인하지 못했습니다. 제품을 다시 선택해 주세요.',CONVERSATION_CHANGED:'다른 탭에서 대화나 약관이 바뀌었습니다. 현재 대화를 확인하고 다시 보내 주세요.',CONVERSATION_TURN_LIMIT:'이 대화의 메시지 한도에 도달했습니다. 새 대화를 시작해 주세요.',CONVERSATION_LIMIT:'대화 한도에 도달했습니다. 자료를 삭제한 뒤 다시 시작해 주세요.',NIM_INCOMPLETE_RESPONSE:'응답이 완성되지 않아 검색을 중단했습니다. 다시 시도해 주세요.',NIM_TIMEOUT:'검색 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',NIM_SERVICE_UNAVAILABLE:'검색 서비스가 일시적으로 응답하지 않습니다.',NIM_MODEL_UNAVAILABLE:'설정된 검색 모델을 사용할 수 없습니다. 모델 설정과 접근 권한을 확인해 주세요.',NIM_AUTH_FAILED:'검색 서비스의 인증 설정과 접근 권한을 확인해 주세요.',NIM_RATE_LIMIT:'검색 서비스의 사용 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.',NO_EXPLICIT_TERMS:'검색할 구체적인 정보를 찾지 못했습니다. 사고 상황·장소·차량, 진단명·약품명 또는 찾고 싶은 약관 표현을 적어 주세요.',PDF_PAGE_LIMIT:'약관은 최대 1,000페이지까지 올릴 수 있습니다.',PDF_TEXT_LIMIT:'약관은 최대 200만 자까지 처리할 수 있습니다.',PDF_SIZE_LIMIT:'약관은 최대 20 MB까지 올릴 수 있습니다.',ENCRYPTED_PDF:'암호로 잠긴 PDF입니다. 암호를 해제한 사본을 올려 주세요.',PDF_RUNTIME_MISSING:'PDF 처리 프로그램이 아직 설치되지 않았습니다. 실행 가이드의 PDF 설치 단계를 확인해 주세요.',PROVIDER_UNAVAILABLE:'외부 서비스에 연결하지 못했습니다. 연결 설정을 확인하고 다시 시도해 주세요.',PROVIDER_REQUEST_FAILED:'외부 서비스 요청이 실패했습니다. API 설정과 이용 한도를 확인해 주세요.',DOCUMENT_REQUIRED:'먼저 보험약관 PDF를 올려 주세요.',NIM_CONSENT_REQUIRED:'NVIDIA 자료 전송에 동의해야 검색을 진행할 수 있습니다.',TEXT_LAYER_REQUIRED:'이 약관에는 검색 가능한 문자 정보가 없습니다. 텍스트가 있는 약관 PDF를 올려 주세요.',CASE_BUSY:'이 자료에서 진행 중인 작업이 있습니다. 완료 후 다시 시도해 주세요.',NVIDIA_KEY_REQUIRED:'검색 서비스의 인증 설정이 필요합니다.',NAT_RUNTIME_MISSING:'검색 기능을 실행하는 데 필요한 프로그램 설치를 확인해 주세요.',NIM_NOT_CONFIGURED:'검색 모델 연결 설정이 필요합니다.',MFDS_NOT_CONFIGURED:'공식 의약품 조회 서비스가 아직 설정되지 않았습니다.',PDF_TIMEOUT:'문서 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',CASE_NOT_FOUND:'이 자료는 만료되었거나 삭제되었습니다. 다시 업로드해 주세요.',NO_DOCUMENT:'먼저 보험약관 PDF를 올려 주세요.',PDF_TOO_MANY_PAGES:'약관은 최대 1,000페이지까지 올릴 수 있습니다.',PDF_TOO_MUCH_TEXT:'약관의 텍스트가 처리 한도를 넘었습니다.',FILE_TOO_LARGE:'파일이 너무 큽니다. 약관은 20 MB까지 올릴 수 있습니다.',ABORTED:'작업이 취소되었습니다.'};
 function fail(e){$('error').textContent=errors[e.code]||e.message||'요청을 완료하지 못했습니다. 다시 시도해 주세요.';$('error').classList.remove('hidden');}
 function clearError(){$('error').classList.add('hidden');}
 function requestCloudConsent(){
@@ -60,11 +60,11 @@ function renderConversation(conversation){
 }
 async function refreshConversation(){const conversation=await api(`/api/cases/${state.caseId}/conversation`);renderConversation(conversation);return conversation;}
 async function acceptResult(result,jobId){if(result?.document){await refreshCase();}else if(Array.isArray(result?.quotes)){renderResult(result,jobId);}else{await refreshCase();}}
-function followJob(jobId){busy(jobId,'작업을 접수했습니다.');state.stream?.close();const stream=new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);state.stream=stream;let finishing=false;async function finish(){if(finishing)return;finishing=true;stream.close();try{const job=await api(`/api/jobs/${encodeURIComponent(jobId)}`);if(job.kind==='investigation')await refreshConversation();if(job.state==='failed'){const code=typeof job.error==='string'?job.error:job.error?.code;throw Object.assign(new Error('자료 처리 중 오류가 발생했습니다.'),{code});}if(job.state!=='cancelled'&&job.kind!=='investigation')await acceptResult(job.result,jobId);}catch(e){fail(e);}finally{idle();}}
+function followJob(jobId,message='작업을 접수했습니다.'){busy(jobId,message);state.stream?.close();const stream=new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);state.stream=stream;let finishing=false;async function finish(){if(finishing)return;finishing=true;stream.close();try{const job=await api(`/api/jobs/${encodeURIComponent(jobId)}`);if(job.kind==='investigation')await refreshConversation();if(job.state==='failed'){const code=typeof job.error==='string'?job.error:job.error?.code;throw Object.assign(new Error('자료 처리 중 오류가 발생했습니다.'),{code});}if(job.state!=='cancelled'&&job.kind!=='investigation')await acceptResult(job.result,jobId);}catch(e){fail(e);}finally{idle();}}
 for(const event of ['queued','stage_started','stage_progress','stage_completed','completed','failed','cancelled'])stream.addEventListener(event,async e=>{let data={};try{data=JSON.parse(e.data);}catch{}if(['completed','failed','cancelled'].includes(event)){await finish();}else{$('progressText').textContent=data.message||'자료를 확인하고 있습니다.';}});stream.onerror=()=>{if(!finishing)$('progressText').textContent='진행 상태에 다시 연결하고 있습니다. 작업은 계속됩니다.';};
 // The job may finish before its event stream is connected.
 api(`/api/jobs/${encodeURIComponent(jobId)}`).then(j=>{if(['completed','failed','cancelled'].includes(j.state))finish();}).catch(e=>{stream.close();idle();fail(e);});}
-async function refreshCase(){const c=await api(`/api/cases/${encodeURIComponent(state.caseId)}`);state.document=c.document;const name=c.document?.name||'약관 원문';$('documentName').textContent=name;$('documentName').title=name;$('policyLabel').textContent=c.document?`${name} · ${c.document.pages}쪽`:'PDF 업로드 · 최대 20 MB';if(c.document&&state.pdfDocumentId!==c.document.id){await openPdf();state.pdfDocumentId=c.document.id;}if(c.products?.length)renderProducts(c.products);await refreshConversation();return c;}
+async function refreshCase(c=null){c??=await api(`/api/cases/${encodeURIComponent(state.caseId)}`);state.document=c.document;const name=c.document?.name||'약관 원문';$('documentName').textContent=name;$('documentName').title=name;$('policyLabel').textContent=c.document?`${name} · ${c.document.pages}쪽`:'PDF 업로드 · 최대 20 MB';if(c.document&&state.pdfDocumentId!==c.document.id){await openPdf();state.pdfDocumentId=c.document.id;}if(c.products?.length)renderProducts(c.products);await refreshConversation();return c;}
 async function openPdf(){state.hits=[];state.resultJob=null;$('download').disabled=true;if(state.pdfDocumentId){$('messages').replaceChildren();}$('clearResults').disabled=true;state.renderTask?.cancel();if(state.pdf)await state.pdf.loadingTask.destroy();state.pdf=null;state.pdf=await pdfjs.getDocument({url:`/api/cases/${encodeURIComponent(state.caseId)}/pdf`,cMapUrl:'/vendor/pdfjs/cmaps/',cMapPacked:true,standardFontDataUrl:'/vendor/pdfjs/standard_fonts/',wasmUrl:'/vendor/pdfjs/wasm/'}).promise;state.page=1;state.hits=[];state.resultJob=null;$('download').disabled=true;$('pdfEmpty').classList.add('hidden');$('pdfPage').classList.remove('hidden');$('pageNumber').max=state.pdf.numPages;$('pageCount').textContent=`/ ${state.pdf.numPages}`;await renderPage();}
 function renderPage(){const version=++state.renderVersion;state.renderTask?.cancel();state.renderChain=state.renderChain.catch(()=>{}).then(async()=>{if(!state.pdf||version!==state.renderVersion)return;const page=await state.pdf.getPage(state.page);if(version!==state.renderVersion)return;const natural=page.getViewport({scale:1});const width=Math.max(240,$('pdfScroll').clientWidth-48);const viewport=page.getViewport({scale:width/natural.width*state.zoom});state.viewport=viewport;const ratio=window.devicePixelRatio||1;const canvas=$('pdfCanvas');canvas.width=Math.ceil(viewport.width*ratio);canvas.height=Math.ceil(viewport.height*ratio);canvas.style.width=`${viewport.width}px`;canvas.style.height=`${viewport.height}px`;$('pdfPage').style.width=`${viewport.width}px`;$('pdfPage').style.height=`${viewport.height}px`;$('pdfPage').style.setProperty('--scale-factor',viewport.scale);$('pdfPage').style.setProperty('--user-unit',page.userUnit||1);$('textLayer').replaceChildren();$('highlights').replaceChildren();$('pageNumber').value=state.page;$('zoomValue').textContent=`${Math.round(state.zoom*100)}%`;state.renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport,transform:ratio===1?null:[ratio,0,0,ratio,0,0]});try{await state.renderTask.promise;}catch(e){if(e.name==='RenderingCancelledException')return;throw e;}if(version!==state.renderVersion)return;const text=await page.getTextContent();const layer=new pdfjs.TextLayer({textContentSource:text,container:$('textLayer'),viewport});await layer.render();if(version===state.renderVersion)drawHighlights(viewport);});return state.renderChain.catch(e=>{if(e.name!=='RenderingCancelledException')fail(e);});}
 function drawHighlights(viewport){const seen=new Set();const svg=$('highlights');svg.replaceChildren();svg.setAttribute('width',viewport.width);svg.setAttribute('height',viewport.height);svg.setAttribute('viewBox',`0 0 ${viewport.width} ${viewport.height}`);for(const hit of state.hits.filter(h=>h.page===state.page)){for(const segment of hit.segments||[]){const q=segment.quad;if(!q||q.length!==8)continue;const key=`${segment.index}:${segment.start}:${segment.end}`;if(seen.has(key))continue;seen.add(key);const points=[];for(let i=0;i<8;i+=2)points.push(viewport.convertToViewportPoint(q[i],q[i+1]).join(','));const polygon=document.createElementNS('http://www.w3.org/2000/svg','polygon');polygon.setAttribute('points',points.join(' '));polygon.setAttribute('fill','#ffdc45');polygon.setAttribute('fill-opacity','.48');svg.append(polygon);}}}
@@ -153,21 +153,38 @@ function clearBrowserData(){
   for(const key of Object.keys(storage))if(['concrete-insure-','insure-lens-'].some(prefix=>key.startsWith(prefix)))storage.removeItem(key);
  }
 }
-async function resetPreviousCases(){
- // Read the old deletion pointers too, so a rename cannot orphan uploaded data.
- const ids=new Set([sessionStorage,localStorage].flatMap(storage=>['concrete-insure-case','insure-lens-case'].map(key=>storage.getItem(key))));
- for(const id of ids){
-  if(!id||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id))continue;
-  try{await api(`/api/cases/${id}`,{method:'DELETE',signal:AbortSignal.timeout(15000)});}
-  catch(error){if(error.status!==404)throw error;}
+function savedCaseId(){
+ // A per-tab pointer preserves the current case; older versions used another key/storage.
+ for(const storage of [sessionStorage,localStorage]){
+  for(const key of ['concrete-insure-case','insure-lens-case']){
+   const id=storage.getItem(key);
+   if(id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id))return id;
+   if(id)storage.removeItem(key);
+  }
  }
- // Keep deletion pointers when a request fails so the next attempt can finish.
- clearBrowserData();
+ return null;
+}
+function forgetCasePointer(id){
+ for(const storage of [sessionStorage,localStorage]){
+  for(const key of ['concrete-insure-case','insure-lens-case'])if(storage.getItem(key)===id)storage.removeItem(key);
+ }
+}
+async function restoreCase(){
+ const id=savedCaseId();if(!id)return null;
+ let current;
+ try{current=await api(`/api/cases/${id}`,{signal:AbortSignal.timeout(15000)});}
+ catch(error){if(error.status!==404)throw error;forgetCasePointer(id);return null;}
+ // Migrate only after the server has verified ownership. Never submit or delete on reload.
+ state.caseId=id;sessionStorage.setItem('concrete-insure-case',id);
+ sessionStorage.removeItem('insure-lens-case');
+ for(const key of ['concrete-insure-case','insure-lens-case'])if(localStorage.getItem(key)===id)localStorage.removeItem(key);
+ await refreshCase(current);
+ return current.jobs.find(job=>['queued','running'].includes(job.state));
 }
 async function start(){
  if(state.starting)return;
- state.starting=true;state.ready=false;clearError();$('retryReset').classList.add('hidden');
- busy(null,'이전 자료를 정리하고 있습니다.');
+ state.starting=true;state.ready=false;clearError();$('retryRestore').classList.add('hidden');
+ busy(null,'이전 대화와 요청을 불러오고 있습니다.');
  for(const id of ['clearCase','drugName'])$(id).disabled=true;
  $('drugForm').querySelector('button').disabled=true;
  for(const id of ['query','drugName','policyFile'])$(id).value='';
@@ -175,19 +192,20 @@ async function start(){
  document.querySelectorAll('details').forEach(section=>section.open=false);
  $('cloudConsent').checked=false;$('confirmConsent').disabled=true;
  try{
-  await resetPreviousCases();
   state.config=await api('/api/config',{signal:AbortSignal.timeout(15000)});
+  const activeJob=await restoreCase();
   state.ready=true;idle();
   for(const id of ['clearCase','drugName'])$(id).disabled=false;
   $('drugForm').querySelector('button').disabled=false;
   $('availability').textContent=state.config.nimEnabled?'검색 준비 완료':'연결 설정 필요';
+  if(activeJob)followJob(activeJob.id,'진행 중인 요청에 다시 연결하고 있습니다.');
  }catch(error){
-  $('progress').classList.add('hidden');$('availability').textContent='초기화 확인 필요';
-  fail(new Error('이전 자료 정리 또는 서버 연결을 완료하지 못했습니다. 서버 연결을 확인한 뒤 초기화를 다시 시도해 주세요.'));
-  $('retryReset').classList.remove('hidden');
+  $('progress').classList.add('hidden');$('availability').textContent='대화 복원 확인 필요';
+  fail(new Error('이전 대화와 요청을 불러오지 못했습니다. 자료는 삭제하지 않았습니다. 서버 연결을 확인한 뒤 다시 시도해 주세요.'));
+  $('retryRestore').classList.remove('hidden');
  }finally{state.starting=false;}
 }
-$('retryReset').addEventListener('click',start);
-// A page restored from the back/forward cache must not revive old evidence.
+$('retryRestore').addEventListener('click',()=>location.reload());
+// Recheck persisted state when returning from the back/forward cache.
 window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
 start();

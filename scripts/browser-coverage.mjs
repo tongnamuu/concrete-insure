@@ -1,4 +1,4 @@
-import {ready,emptySession} from './browser-session-helper.mjs';
+import {ready,restoredSession} from './browser-session-helper.mjs';
 import {acceptConsent} from './consent-test-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
@@ -38,6 +38,6 @@ try{
  execFileSync(python,['-c',"import pymupdf as f,sys;d=f.open(sys.argv[1]);assert sum(len(list(p.annots() or [])) for p in d)>0;assert '발록사비르' in ''.join(p.get_text() for p in d)",path.join(temp,'marked.pdf')]);
  // A compact screenshot of the decision scope and source connection; no personal data.
  await page.locator('.clause-group[data-kind="payment"] summary').click();await definition.locator('summary').click();if(process.env.SCREENSHOT)await page.locator('.coverage-panel').screenshot({path:process.env.SCREENSHOT});
- await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await emptySession(page);await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
+ await page.locator('#clearResults').click();await expect(page.locator('.coverage-panel')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await page.reload();await restoredSession(page);await expect(page.locator('.coverage-panel')).toHaveCount(0);assert.deepEqual(errors,[]);
  console.log(JSON.stringify({ok:true,orchestrator:'nat',inference:'explicit-test-fixture',policyBenefit:true,ingredientLink:true,mfds:'explicit-http-fixture',productSelection:true,freshConsent:true,resumeWithoutResubmitting:true,singleConversationTurn:true,draftPreserved:true,allFourClauses:true,noBlankCards:true,nextRiderExcluded:true,highlight:true,download:true,clearAndReload:true,browserErrors:errors}));
 }catch(e){console.error(JSON.stringify({error:e.message,uiError:await page.locator('#error').textContent()}));process.exitCode=1;}finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}
