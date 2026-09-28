@@ -2,10 +2,10 @@ import copy
 import json
 import httpx
 import pytest
-from insurelens.agents.drug_references import verify_drug_references, reference_from_detail, paragraphs
-from insurelens.agents.drug import identify_drugs
-from insurelens.providers import Drugs
-from insurelens.core import AppError
+from concreteinsure.agents.drug_references import verify_drug_references, reference_from_detail, paragraphs
+from concreteinsure.agents.drug import identify_drugs
+from concreteinsure.providers import Drugs
+from concreteinsure.core import AppError
 from tests.mfds_fixture import provider, row, response, xml, ITEM_ID
 
 

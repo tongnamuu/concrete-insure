@@ -1,5 +1,5 @@
-from insurelens.core import ensure
-from insurelens.pdf import pdf_operation
+from concreteinsure.core import ensure
+from concreteinsure.pdf import pdf_operation
 
 
 async def retrieve_policy(*, document, terms, ids, pages=None, operation=pdf_operation):

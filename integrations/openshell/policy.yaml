@@ -1,5 +1,5 @@
 # Deployment template for a Linux image with the application at /app.
-# Not automatically activated by insure-lens; validate with installed OpenShell version.
+# Not automatically activated by concrete-insure; validate with installed OpenShell version.
 version: 1
 filesystem_policy:
   include_workdir: false

@@ -1,4 +1,4 @@
-# InsureLens architecture and boundaries
+# concreteInsure architecture and boundaries
 
 The final user specification supersedes the earlier claim-screening proposal: no eligibility decision, no claim recommendation, no diagnosis inference, no paraphrase or summary of policy. The backend uses Python FastAPI, the NeMo Microservices Python SDK and native in-process NAT. A separate Python PDF process provides cancellable text-layer geometry and annotation work. JavaScript is confined to the browser and browser tests. NemoClaw remains excluded; web is the only user-facing interface.
 
@@ -6,18 +6,18 @@ The final user specification supersedes the earlier claim-screening proposal: no
 
 | Module | Implementation | Input/output contract |
 |---|---|---|
-| Intake and job API | insurelens/server.py,insurelens/store.py | Authenticated case-scoped uploads and jobs, replayable SSE |
-| Product-selection continuation | insurelens/selection.py,insurelens/store.py | Server-owned facts/candidates/context → fresh consent and ingredient-stage continuation |
-| Conversation context | insurelens/conversation.py,insurelens/store.py | Server-owned successful turns and bounded prior source excerpts → follow-up context |
-| Document worker | insurelens/pdf.py,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
+| Intake and job API | concreteinsure/server.py,concreteinsure/store.py | Authenticated case-scoped uploads and jobs, replayable SSE |
+| Product-selection continuation | concreteinsure/selection.py,concreteinsure/store.py | Server-owned facts/candidates/context → fresh consent and ingredient-stage continuation |
+| Conversation context | concreteinsure/conversation.py,concreteinsure/store.py | Server-owned successful turns and bounded prior source excerpts → follow-up context |
+| Document worker | concreteinsure/pdf.py,python/pdf_worker.py | Original PDF → packed glyph index; source hits; annotation bytes |
 | Prescription reading | Nvidia.ocr, PDF text/render tools | Image or prescription PDF → draft text requiring confirmation |
-| Input extraction | insurelens/agents/input.py | User query/situation description/confirmed text → literal terms |
-| Drug identity validation | insurelens/agents/drug.py,Drugs.lookup | User-selected official product → unchanged ingredient fields |
-| Medicine evidence agent | insurelens/agents/drug_agent.py,insurelens/nat_drug.py | Conditional NAT tool-calling agent → MFDS candidates/user selection or verified product evidence |
-| Product source parser | insurelens/agents/drug_references.py | Official fields and label paragraphs → literal facts, hashes and provenance |
-| Policy retrieval tools | insurelens/agents/retrieval.py | Grounded term IDs or known source IDs → original spans |
-| Policy ReAct agent | insurelens/agent.py | NIM native tool calls → tools → observations → next turn |
-| Evidence assembly | insurelens/agents/verification.py | Trusted source objects → structured result; no prose generation |
+| Input extraction | concreteinsure/agents/input.py | User query/situation description/confirmed text → literal terms |
+| Drug identity validation | concreteinsure/agents/drug.py,Drugs.lookup | User-selected official product → unchanged ingredient fields |
+| Medicine evidence agent | concreteinsure/agents/drug_agent.py,concreteinsure/nat_drug.py | Conditional NAT tool-calling agent → MFDS candidates/user selection or verified product evidence |
+| Product source parser | concreteinsure/agents/drug_references.py | Official fields and label paragraphs → literal facts, hashes and provenance |
+| Policy retrieval tools | concreteinsure/agents/retrieval.py | Grounded term IDs or known source IDs → original spans |
+| Policy ReAct agent | concreteinsure/agent.py | NIM native tool calls → tools → observations → next turn |
+| Evidence assembly | concreteinsure/agents/verification.py | Trusted source objects → structured result; no prose generation |
 | Web viewer | public/ | 1:1 split, uploads, explicit confirmation, source cards, PDF text-layer highlights |
 
 See contracts.md for exact fields. A prescription can be replaced by a free-text description (up to4,000characters). Description-only requests are valid. The description remains a separate, unchanged user statement and is never labelled as a verified clinical record. Exact-substring grounding covers query and description separately. Deterministic tools perform source parsing and validation without model calls. Each has a single responsibility and testable boundary. ReAct is applied where an observation changes the next retrieval action, not to calculation of coordinates or source slices.
@@ -31,6 +31,8 @@ MFDS: official DrugPrdtPrmsnInfoService08 with getDrugPrdtPrmsnInq08, getDrugPrd
 Translation: optional separately configured model supplies English glosses to the supervisor. Original term IDs, user input and quotes remain immutable. Glosses do not become search terms or source evidence. General Korean↔English free-text translation is not lossless, so no automatic round-trip translation of policy is implemented. A lighter model can be configured; it is not presumed faster without benchmark.
 
 ## Persistence and events
+
+The rename to concreteInsure retains existing case ownership when a legacy `insurelens_session` cookie is present, then issues `concreteinsure_session`. Refresh cleanup recognizes both `insure-lens-case` and `concrete-insure-case` deletion pointers in local/session storage before clearing either prefix. This migration preserves the existing refresh-to-delete behavior rather than restoring prior data.
 
 The current interaction assumes one user. Within the open page, follow-up questions, product selection, retries and SSE reconnects retain the active `conversationId`; a new `jobId` denotes another execution, not another conversation. The ownership cookie is independent of this conversation boundary. Confirmed data clearing (the UI’s 자료 삭제 action) or page refresh deletes the previous case and its context; the next upload and first question create fresh case/conversation IDs. Cancelling the clear confirmation keeps the existing conversation. Explicit new-conversation actions and document replacement continue to isolate document-specific evidence as described below.
 
@@ -73,7 +75,7 @@ The application can identify an expressly described benefit and distinguish dire
 
 The parent workflow binds NAT's `drug_evidence_agent` through `Builder.get_function`. After literal input extraction, Python routing calls it only for explicit medicine names or user-selected products. A disease/accident alone does not cause specialist inference or an MFDS lookup. Names found only in policy evidence cannot activate it.
 
-`nat-workflow.yml` registers the native `tool_calling_agent`, the `medicine` Function Group, and the `insurelens_evidence_nim` LLM adapter. The latter delegates through the existing NeMo Microservices SDK, preserving timeout/retry/privacy rules without switching clients. NAT/LangGraph owns the medicine tool-selection/observation loop; `return_direct` terminates through `finish_evidence` without another model call. The skill instructions are loaded from `skills/drug-ingredient-resolver/SKILL.md` at runtime. Per-request ContextVars isolate the allowed names/products, evidence ledger and authorized providers across tasks. Tool indexes cannot select arbitrary product IDs. Failed or fabricated final answers are rejected.
+`nat-workflow.yml` registers the native `tool_calling_agent`, the `medicine` Function Group, and the `concreteinsure_evidence_nim` LLM adapter. The latter delegates through the existing NeMo Microservices SDK, preserving timeout/retry/privacy rules without switching clients. NAT/LangGraph owns the medicine tool-selection/observation loop; `return_direct` terminates through `finish_evidence` without another model call. The skill instructions are loaded from `skills/drug-ingredient-resolver/SKILL.md` at runtime. Per-request ContextVars isolate the allowed names/products, evidence ledger and authorized providers across tasks. Tool indexes cannot select arbitrary product IDs. Failed or fabricated final answers are rejected.
 
 The upper policy-search loop remains application-owned ReAct. Input extraction, PDF parsing, source verification and annotation are not independent LLM agents. The former fixed medicine resolver orchestration has been removed; CLI lookup/detail remain deterministic adapters to the same provider/parser.
 

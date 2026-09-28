@@ -7,7 +7,7 @@ import path from 'node:path';
 import {startPythonTestServer,python} from './python-test-server.mjs';
 import {acceptConsent} from './consent-test-helper.mjs';
 import {ready,emptySession} from './browser-session-helper.mjs';
-const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-reset-'));
+const temp=await mkdtemp(path.join(os.tmpdir(),'concreteinsure-reset-'));
 const root=path.join(temp,'data'),pdf=path.join(temp,'policy.pdf');
 execFileSync(python,['-c',"import pymupdf as f,sys;d=f.open();p=d.new_page();p.insert_text((50,100),'독감 항바이러스제 발록사비르 oseltamivir',fontname='korea');d.save(sys.argv[1])",pdf]);
 const server=await startPythonTestServer(root,'tests.browser_server:create_reset_test_app');
@@ -17,7 +17,7 @@ page.on('pageerror',e=>errors.push(e.message));
 async function upload(){await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});await expect(page.locator('#progress')).toBeHidden();}
 async function send(query){await page.locator('#query').fill(query);await page.locator('#send').click();await acceptConsent(page);}
 async function snapshot(){
- const id=await page.evaluate(()=>sessionStorage.getItem('insure-lens-case'));
+ const id=await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case'));
  const response=await page.request.get(`${server.base}/api/cases/${id}`);assert.equal(response.status(),200);
  return {id,jobs:(await response.json()).jobs.map(j=>j.id)};
 }
@@ -34,21 +34,34 @@ with sqlite3.connect(root/'store.sqlite') as db:
  for job in jobs:
   for table in ['turns','events']:
    assert db.execute(f'SELECT count(*) FROM {table} WHERE job_id=?',(job,)).fetchone()[0]==0`,root,saved.id,JSON.stringify(saved.jobs)]);
- assert.deepEqual(await page.evaluate(()=>[...Object.keys(sessionStorage),...Object.keys(localStorage)].filter(k=>k.startsWith('insure-lens-'))),[]);
+ assert.deepEqual(await page.evaluate(()=>[...Object.keys(sessionStorage),...Object.keys(localStorage)].filter(k=>['concrete-insure-','insure-lens-'].some(prefix=>k.startsWith(prefix)))),[]);
 }
 try{
  await page.goto(server.base);await emptySession(page);await upload();
  // A separate tab's new case must not be deleted by this tab's refresh.
  const other=await context.newPage();await other.goto(server.base);await ready(other);
  await other.locator('#policyFile').setInputFiles(pdf);await expect(other.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
- const otherId=await other.evaluate(()=>sessionStorage.getItem('insure-lens-case'));
+ const otherId=await other.evaluate(()=>sessionStorage.getItem('concrete-insure-case'));
  await send('조플루자를 처방받았어요');await expect(page.locator('.drug-selection')).toBeVisible({timeout:30000});
  let saved=await snapshot();
- await page.evaluate(()=>{sessionStorage.setItem('insure-lens-event-test','9');localStorage.setItem('unrelated-setting','preserve');});
+ await page.evaluate(()=>{sessionStorage.setItem('concrete-insure-event-test','9');localStorage.setItem('unrelated-setting','preserve');});
  await page.reload();await emptySession(page);await removed(saved);
  assert.equal((await page.request.get(`${server.base}/api/cases/${otherId}`)).status(),200);
  assert.equal(await page.evaluate(()=>localStorage.getItem('unrelated-setting')),'preserve');
  await other.close();
+ // Previous-brand cookies and deletion pointers must still remove the old case.
+ for(const storageName of ['sessionStorage','localStorage']){
+  await upload();saved=await snapshot();
+  const owner=(await context.cookies(server.base)).find(cookie=>cookie.name==='concreteinsure_session');
+  await context.clearCookies({name:'concreteinsure_session'});
+  await context.addCookies([{...owner,name:'insurelens_session'}]);
+  await page.evaluate(storageName=>{
+   const id=sessionStorage.getItem('concrete-insure-case');sessionStorage.removeItem('concrete-insure-case');
+   window[storageName].setItem('insure-lens-case',id);sessionStorage.setItem('insure-lens-event-test','1');
+  },storageName);
+  await page.reload();await emptySession(page);await removed(saved);
+  assert.equal((await context.cookies(server.base)).find(cookie=>cookie.name==='concreteinsure_session').value,owner.value);
+ }
  // Successful evidence, source files, OCR drafts and unsent text all disappear.
  await upload();await send('조플루자를 처방받았어요');await expect(page.locator('.drug-selection')).toBeVisible({timeout:30000});
  await page.locator('.drug-selection input[type=checkbox]').first().check();
@@ -60,14 +73,14 @@ try{
  await page.locator('#query').fill('아직 보내지 않은 질문');await page.locator('.drug-section summary').click();await page.locator('#drugName').fill('타미플루');
  saved=await snapshot();
  // Migrate the previous browser version's shared localStorage pointer by deleting it.
- await page.evaluate(()=>{localStorage.setItem('insure-lens-case',sessionStorage.getItem('insure-lens-case'));sessionStorage.removeItem('insure-lens-case');});
+ await page.evaluate(()=>{localStorage.setItem('concrete-insure-case',sessionStorage.getItem('concrete-insure-case'));sessionStorage.removeItem('concrete-insure-case');});
  await page.reload();await emptySession(page);await removed(saved);
  // Failed cleanup must retain its deletion pointer and block new work until retry succeeds.
  await upload();saved=await snapshot();let failDelete=true;
  await page.route(`**/api/cases/${saved.id}`,route=>route.request().method()==='DELETE'&&failDelete?route.fulfill({status:503,contentType:'application/json',body:'{"error":"REQUEST_FAILED"}'}):route.continue());
  await page.reload();await expect(page.locator('#retryReset')).toBeVisible();
  for(const id of ['send','policyFile','medicalFile','drugName','clearCase'])await expect(page.locator('#'+id)).toBeDisabled();
- assert.equal(await page.evaluate(()=>sessionStorage.getItem('insure-lens-case')),saved.id);
+ assert.equal(await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case')),saved.id);
  assert.equal((await page.request.get(`${server.base}/api/cases/${saved.id}`)).status(),200);
  failDelete=false;await page.locator('#retryReset').click();await emptySession(page);await removed(saved);
  await page.unroute(`**/api/cases/${saved.id}`);
@@ -79,5 +92,5 @@ try{
  saved=await snapshot();await page.request.delete(`${server.base}/api/cases/${saved.id}`,{headers:{'X-Local-Request':'1'}});
  await page.reload();await emptySession(page);await removed(saved);
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({ok:true,resetPendingSelection:true,resetEvidenceAndOcr:true,resetUnsentInputs:true,serverFilesAndRecordsRemoved:true,legacyPointerCleaned:true,unrelatedTabPreserved:true,cleanupFailureRetry:true,runningJobCancelled:true,newSearchCompletes:true,stalePointerHandled:true,browserErrors:errors}));
+ console.log(JSON.stringify({ok:true,resetPendingSelection:true,resetEvidenceAndOcr:true,resetUnsentInputs:true,serverFilesAndRecordsRemoved:true,legacyPointerCleaned:true,previousBrandCleanup:true,unrelatedTabPreserved:true,cleanupFailureRetry:true,runningJobCancelled:true,newSearchCompletes:true,stalePointerHandled:true,browserErrors:errors}));
 }finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

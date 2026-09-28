@@ -1,4 +1,4 @@
-# InsureLens 모듈 정의
+# concreteInsure 모듈 정의
 
 구현 규약은 [contracts.md](contracts.md), 현재 연결 구조는 [architecture.md](architecture.md)를 기준으로 한다. 보험금 지급 판단·청구 권유·질병 추정·약관 요약은 제공하지 않는다.
 

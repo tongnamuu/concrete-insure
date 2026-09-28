@@ -1,7 +1,7 @@
 """Explicit browser-test app factory. Not a production provider or mode."""
 import os
 from types import SimpleNamespace
-from insurelens.server import create_app
+from concreteinsure.server import create_app
 from tests.nim_fixture import ScriptedNim
 
 

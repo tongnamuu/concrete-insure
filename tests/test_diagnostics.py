@@ -7,11 +7,11 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from insurelens.core import AppError
-from insurelens.diagnostics import RuntimeLog, log_context, measured, record
-from insurelens.providers import Nvidia
-from insurelens.server import create_app
-from insurelens.store import Queue, Store
+from concreteinsure.core import AppError
+from concreteinsure.diagnostics import RuntimeLog, log_context, measured, record
+from concreteinsure.providers import Nvidia
+from concreteinsure.server import create_app
+from concreteinsure.store import Queue, Store
 
 SECRET = 'private-prescription-and-nvapi-secret'
 
@@ -156,7 +156,7 @@ async def test_http_job_correlation_no_bodies_cookies_or_raw_paths(tmp_path, mon
         assert request_id != SECRET
         job_id = response.json()['jobId']
         async with asyncio.timeout(5):
-            while app.state.store.job(job_id, client.cookies['insurelens_session'])['state'] != 'completed':
+            while app.state.store.job(job_id, client.cookies['concreteinsure_session'])['state'] != 'completed':
                 await asyncio.sleep(.01)
         bad = await client.get('/api/jobs/'+SECRET, params={'private': SECRET})
         assert bad.status_code == 400

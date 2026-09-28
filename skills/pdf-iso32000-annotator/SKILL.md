@@ -5,7 +5,7 @@ description: Search exact insurance PDF source spans and export native highlight
 
 # Exact PDF source and highlights
 
-Use `insurelens-skill pdf-iso32000-annotator` with one JSON stdin object after installing the project and its PDF dependencies. The alternative is `.venv/bin/python -m insurelens.skills_cli pdf-iso32000-annotator` from the project.
+Use `concreteinsure-skill pdf-iso32000-annotator` with one JSON stdin object after installing the project and its PDF dependencies. The alternative is `.venv/bin/python -m concreteinsure.skills_cli pdf-iso32000-annotator` from the project.
 
 All paths must be absolute local paths. These are trusted CLI paths, not web request values. Explicit index/output paths authorize only the requested local outputs; keep outputs separate from the original. Parent directories must exist.
 

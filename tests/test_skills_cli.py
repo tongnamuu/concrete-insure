@@ -11,8 +11,8 @@ import unittest
 import pymupdf
 import yaml
 
-from insurelens.skills_cli import execute
-from insurelens.core import AppError
+from concreteinsure.skills_cli import execute
+from concreteinsure.core import AppError
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ("ocr-prescription", "drug-ingredient-resolver", "pdf-iso32000-annotator")
@@ -20,7 +20,7 @@ SKILLS = ("ocr-prescription", "drug-ingredient-resolver", "pdf-iso32000-annotato
 
 class SkillsCliTests(unittest.TestCase):
     def cli(self, skill, value, *, ok=True):
-        result = subprocess.run([sys.executable, "-m", "insurelens.skills_cli", skill],
+        result = subprocess.run([sys.executable, "-m", "concreteinsure.skills_cli", skill],
             input=json.dumps(value, ensure_ascii=False), text=True, capture_output=True,
             cwd=ROOT, env={**os.environ, "NVIDIA_API_KEY":"", "MFDS_API_KEY":""}, timeout=30)
         self.assertEqual(result.returncode, 0 if ok else 1, result.stderr + result.stdout)

@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {startPythonTestServer,python} from './python-test-server.mjs';
 import {acceptConsent} from './consent-test-helper.mjs';
-const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-conversation-'));
+const temp=await mkdtemp(path.join(os.tmpdir(),'concreteinsure-conversation-'));
 const pdf=path.join(temp,'policy.pdf');
 execFileSync(python,['-c',"import pymupdf as f,sys; d=f.open();p=d.new_page();p.insert_text((50,100),'테스트 약관: 독감 항바이러스제 치료. 제외사항은 별도 확인.',fontname='korea');d.save(sys.argv[1])",pdf]);
 const server=await startPythonTestServer(path.join(temp,'data'),'tests.browser_server:create_conversation_test_app');
@@ -33,18 +33,18 @@ try{
  await page.locator('.assistant-message button').click();await expect(page.locator('#query')).toHaveValue('그 경우 제외사항은?');
  await send('독감',1);
  // Clearing data ends the current conversation; cancelling the confirmation does not.
- const previousCase=await page.evaluate(()=>sessionStorage.getItem('insure-lens-case'));
+ const previousCase=await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case'));
  const previousConversation=requests.at(-1).conversationId;
  page.once('dialog',dialog=>dialog.dismiss());await page.locator('#clearCase').click();
  await expect(page.locator('.investigation-result')).toHaveCount(1);
- assert.equal(await page.evaluate(()=>sessionStorage.getItem('insure-lens-case')),previousCase);
+ assert.equal(await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case')),previousCase);
  const retained=await page.request.get(`${server.base}/api/cases/${previousCase}/conversation`);
  assert.equal((await retained.json()).id,previousConversation);
  page.once('dialog',dialog=>dialog.accept());await page.locator('#clearCase').click();await emptySession(page);
  assert.equal((await page.request.get(`${server.base}/api/cases/${previousCase}`)).status(),404);
  await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
  await expect(page.locator('#progress')).toBeHidden();
- assert.notEqual(await page.evaluate(()=>sessionStorage.getItem('insure-lens-case')),previousCase);
+ assert.notEqual(await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case')),previousCase);
  // An ambiguous follow-up must not resolve using facts from the cleared session.
  await page.locator('#query').fill('그 경우 제외사항은?');await page.locator('#send').click();await acceptConsent(page);
  await expect(page.locator('.assistant-message')).toContainText('검색할 구체적인 정보를 찾지 못했습니다.',{timeout:30000});

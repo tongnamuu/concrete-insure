@@ -1,4 +1,4 @@
-"""SQLite persistence compatible with existing InsureLens local records."""
+"""SQLite persistence compatible with existing concreteInsure local records."""
 import asyncio
 import json
 from pathlib import Path
@@ -209,7 +209,7 @@ class Queue:
 
         with log_context(job_id=identifier):
             record('job.queued')
-            task = asyncio.create_task(run(), name=f'insurelens:{identifier}')
+            task = asyncio.create_task(run(), name=f'concreteinsure:{identifier}')
             self.controls[identifier] = task
             task.add_done_callback(finished)
         return task

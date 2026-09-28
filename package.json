@@ -1,5 +1,5 @@
 {
-  "name": "insure-lens",
+  "name": "concrete-insure",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": ".venv/bin/python -m insurelens.server",
+    "start": ".venv/bin/python -m concreteinsure.server",
     "test": ".venv/bin/python -m pytest -q",
     "skills:list": "npx skills@1.7.0 add . --list",
     "test:browser": "node scripts/browser-smoke.mjs",
@@ -23,5 +23,5 @@
   "devDependencies": {
     "@playwright/test": "^1.56.0"
   },
-  "description": "PDF.js browser assets and browser tests; the InsureLens backend is Python"
+  "description": "PDF.js browser assets and browser tests; the concreteInsure backend is Python"
 }

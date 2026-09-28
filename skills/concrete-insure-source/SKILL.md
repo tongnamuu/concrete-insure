@@ -1,9 +1,9 @@
 ---
-name: insure-lens-source
+name: concrete-insure-source
 description: Locate unmodified insurance-policy passages using explicit user statements, confirmed prescription text, and sourced product ingredients. Use for source retrieval and PDF highlighting, never for diagnosis or claim eligibility decisions.
 ---
 
-# InsureLens source investigation
+# concreteInsure source investigation
 
 Accept only case-scoped document references and the request schema in [source contract](references/contracts.md).
 
@@ -18,4 +18,4 @@ Accept only case-scoped document references and the request schema in [source co
 - Translation, if enabled, supplies advisory English glosses with immutable original term IDs. Search and quote the original language only. Never claim arbitrary machine translation is lossless.
 - Stop on step limits, repeated actions, cancellation, unavailable source, ambiguous product, or invalid schema. Return a typed error or a request for confirmation rather than infer missing evidence.
 
-The web app invokes registered tools; SKILL.md is guidance, not an executable endpoint. Optional `npx skills@1.7.0 add . --skill insure-lens-source` installs this project-local package into a compatible agent. No authorization to message insurers, upload private files elsewhere, or submit a claim is implied.
+The web app invokes registered tools; SKILL.md is guidance, not an executable endpoint. Optional `npx skills@1.7.0 add . --skill concrete-insure-source` installs this project-local package into a compatible agent. No authorization to message insurers, upload private files elsewhere, or submit a claim is implied.

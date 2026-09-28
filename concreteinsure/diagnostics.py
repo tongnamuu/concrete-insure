@@ -12,7 +12,7 @@ from uuid import UUID
 
 from .core import AppError
 
-_context = ContextVar('insurelens_diagnostics', default={})
+_context = ContextVar('concreteinsure_diagnostics', default={})
 EVENTS = {'app.started', 'app.stopped', 'request.completed', 'request.error',
           'job.queued', 'job.started', 'job.stage', 'job.finished', 'job.resumed',
           'operation.started', 'operation.completed', 'operation.failed',
@@ -68,7 +68,7 @@ def safe_fields(fields):
 class RuntimeLog:
     def __init__(self, *, stream=None):
         # StreamHandler defaults to stderr and never creates a log file.
-        self.logger = logging.Logger('insurelens.runtime', level=logging.INFO)
+        self.logger = logging.Logger('concreteinsure.runtime', level=logging.INFO)
         self.logger.propagate = False
         self.handler = logging.StreamHandler(stream)
         self.handler.setFormatter(logging.Formatter('%(message)s'))

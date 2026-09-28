@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {startPythonTestServer,python} from './python-test-server.mjs';
 import {acceptConsent} from './consent-test-helper.mjs';
-const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-progress-'));
+const temp=await mkdtemp(path.join(os.tmpdir(),'concreteinsure-progress-'));
 const pdf=path.join(temp,'policy.pdf');
 execFileSync(python,['-c',"import pymupdf as f,sys; d=f.open();p=d.new_page();p.insert_text((50,100),'독감 인플루엔자',fontname='korea');d.save(sys.argv[1])",pdf]);
 const server=await startPythonTestServer(path.join(temp,'data'),'tests.browser_server:create_slow_test_app');
@@ -23,7 +23,7 @@ try{
  await expect.poll(()=>page.evaluate(()=>window.searchProgress.includes('검색 1단계')),{timeout:12000}).toBe(true);
  await expect(page.locator('.investigation-result')).toHaveCount(0);
  await page.locator('#cancelJob').click();await expect(page.locator('#progress')).not.toBeVisible({timeout:10000});
- const caseId=await page.evaluate(()=>sessionStorage.getItem('insure-lens-case'));
+ const caseId=await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case'));
  const res=await page.request.get(`${server.base}/api/cases/${caseId}`);const job=(await res.json()).jobs.find(j=>j.kind==='investigation');
  assert.equal(job.state,'cancelled');await expect(page.locator('.investigation-result')).toHaveCount(0);
  await page.locator('#query').fill('독감');await page.locator('#send').click();await acceptConsent(page);

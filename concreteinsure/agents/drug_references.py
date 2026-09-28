@@ -5,7 +5,7 @@ import re
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 
-from insurelens.core import ensure
+from concreteinsure.core import ensure
 
 
 class VerifiedReference(dict):

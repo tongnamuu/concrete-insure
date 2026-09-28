@@ -1,6 +1,6 @@
 import pytest
-from insurelens.agents.input import understand_input, understand_input_with_model
-from insurelens.core import AppError
+from concreteinsure.agents.input import understand_input, understand_input_with_model
+from concreteinsure.core import AppError
 
 def test_brand_only_and_generic_retry():
     assert understand_input({'description':'조플루자를 처방받았습니다.'})['terms']==['조플루자']
@@ -24,7 +24,7 @@ async def test_model_terms_must_be_literal_and_description_remains_unmodified():
 
 @pytest.mark.asyncio
 async def test_prescription_candidates_are_explicit_drafts_only():
-    from insurelens.agents.prescription import prescription_candidates
+    from concreteinsure.agents.prescription import prescription_candidates
     assert await prescription_candidates('제품명: 조플루자\n질병코드: J10.1') == ['조플루자','J10.1']
     assert await prescription_candidates('타미플루를 복용합니다.') == []
 
@@ -51,7 +51,7 @@ async def test_raw_description_and_exact_confirmed_terms_reach_model_unchanged()
 
 @pytest.mark.asyncio
 async def test_prescription_no_consent_and_ocr_spelling_are_preserved():
-    from insurelens.agents.prescription import prescription_candidates
+    from concreteinsure.agents.prescription import prescription_candidates
     class MustNotCall:
         enabled=True
         async def chat(self,messages,**kwargs):pytest.fail('no consent')

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from insurelens.core import AppError, ensure
+from concreteinsure.core import AppError, ensure
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class Invocation:
     arguments: dict[str, Any]
 
 
-_invocation: ContextVar[Invocation | None] = ContextVar("insurelens_nat_invocation", default=None)
+_invocation: ContextVar[Invocation | None] = ContextVar("concreteinsure_nat_invocation", default=None)
 
 
 async def invoke_native(message: str) -> str:
@@ -30,7 +30,7 @@ async def invoke_native(message: str) -> str:
     invocation = _invocation.get()
     if invocation is None or message != invocation.token:
         raise ValueError("NAT_INVOCATION_REQUIRED")
-    from insurelens.agent import run_investigation
+    from concreteinsure.agent import run_investigation
 
     result = await run_investigation(**invocation.arguments)
     return json.dumps(result, ensure_ascii=False, allow_nan=False)
@@ -46,17 +46,17 @@ except ModuleNotFoundError as error:
     raise AppError("NAT_RUNTIME_MISSING", 503) from error
 from pydantic import Field
 from nat.data_models.component_ref import FunctionRef
-from insurelens import nat_drug  # Register native medicine tools and SDK adapter.
-from insurelens.agents.drug_agent import _runner as drug_runner
+from concreteinsure import nat_drug  # Register native medicine tools and SDK adapter.
+from concreteinsure.agents.drug_agent import _runner as drug_runner
 
 
-class InsureLensConfig(FunctionBaseConfig, name="insurelens_python"):
+class ConcreteInsureConfig(FunctionBaseConfig, name="concreteinsure_python"):
     timeout_seconds: float = Field(default=1200, ge=1, le=3600)
     drug_agent: FunctionRef = "drug_evidence_agent"
 
 
-@register_function(config_type=InsureLensConfig)
-async def register(config: InsureLensConfig, builder: Builder):
+@register_function(config_type=ConcreteInsureConfig)
+async def register(config: ConcreteInsureConfig, builder: Builder):
     specialist = await builder.get_function(config.drug_agent)
 
     async def run(invocation_token: str) -> str:
@@ -71,7 +71,7 @@ async def register(config: InsureLensConfig, builder: Builder):
 
     yield FunctionInfo.from_fn(
         run,
-        description="Run the InsureLens policy workflow with a conditional native medicine agent within an authorized Python server task. Input is an opaque invocation token only.",
+        description="Run the concreteInsure policy workflow with a conditional native medicine agent within an authorized Python server task. Input is an opaque invocation token only.",
     )
 
 

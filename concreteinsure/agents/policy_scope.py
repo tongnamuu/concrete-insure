@@ -1,7 +1,7 @@
 import re
 import unicodedata
-from insurelens.core import ensure
-from insurelens.pdf import pdf_operation
+from concreteinsure.core import ensure
+from concreteinsure.pdf import pdf_operation
 from .drug_references import verify_drug_references
 from .verification import visible
 

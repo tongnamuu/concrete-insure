@@ -4,7 +4,7 @@
 
 ## 기록 기준
 
-- `insurelens/diagnostics.py`의 공통 로거를 사용하고 JSON 한 줄에 이벤트 하나를 기록한다. 새 필드는 허용 목록에 명시한다.
+- `concreteinsure/diagnostics.py`의 공통 로거를 사용하고 JSON 한 줄에 이벤트 하나를 기록한다. 새 필드는 허용 목록에 명시한다.
 - 시각은 UTC로 기록한다. 처리·큐 대기 시간은 밀리초(`duration_ms`, `wait_ms`), 진행·제한 시간은 초(`elapsed_seconds`, `timeout_seconds`)로 구분한다.
 - `request_id`는 서버에서 생성한다. 백그라운드 작업과 도구 호출에는 원래 요청 ID와 `job_id`를 전달한다. 클라이언트가 보낸 ID를 신뢰하지 않는다.
 - 요청의 HTTP 상태, 작업의 큐 대기·시작·진행·종료, 외부 서비스와 PDF 작업의 소요 시간, 오류 코드와 취소를 기록한다.

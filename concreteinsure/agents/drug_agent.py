@@ -7,15 +7,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from insurelens.core import AppError, ensure
-from insurelens.diagnostics import record
-from insurelens.progress import model_progress
+from concreteinsure.core import AppError, ensure
+from concreteinsure.diagnostics import record
+from concreteinsure.progress import model_progress
 from .drug import identify_drugs
 from .drug_references import reference_from_detail, verify_drug_references
 
 SKILL = (Path(__file__).resolve().parents[2] / 'skills/drug-ingredient-resolver/SKILL.md').read_text()
-_runner: ContextVar[Any] = ContextVar('insurelens_drug_runner', default=None)
-_state: ContextVar[Any] = ContextVar('insurelens_drug_state', default=None)
+_runner: ContextVar[Any] = ContextVar('concreteinsure_drug_runner', default=None)
+_state: ContextVar[Any] = ContextVar('concreteinsure_drug_state', default=None)
 
 
 class EmptyArgs(BaseModel):

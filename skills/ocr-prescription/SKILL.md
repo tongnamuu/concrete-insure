@@ -5,7 +5,7 @@ description: Extract unchanged prescription text and draft drug names or printed
 
 # Prescription text extraction
 
-Use the installed Python CLI `insurelens-skill ocr-prescription`, supplying exactly one JSON object on stdin. The project must be installed; a skills.sh installation discovers these instructions but does not install its Python runtime. Run from the project environment, or use `.venv/bin/python -m insurelens.skills_cli ocr-prescription`.
+Use the installed Python CLI `concreteinsure-skill ocr-prescription`, supplying exactly one JSON object on stdin. The project must be installed; a skills.sh installation discovers these instructions but does not install its Python runtime. Run from the project environment, or use `.venv/bin/python -m concreteinsure.skills_cli ocr-prescription`.
 
 - Text: `{"op":"text","text":"약품명: 조플루자","cloudConsent":false}`.
 - PDF or image: `{"op":"file","path":"/absolute/prescription.pdf","cloudConsent":false}`. Up to 8 MiB; PDFs up to 8 pages. A text PDF works locally. Images/scans require explicit `cloudConsent:true` and configured `NVIDIA_API_KEY` and `NIM_OCR_URL` in the project `.env`.

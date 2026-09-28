@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 import pytest
 
-from insurelens.agents.drug_agent import investigate_if_needed, _state, _runner
-from insurelens.core import AppError
-from insurelens.diagnostics import RuntimeLog, log_context
-from insurelens.nat import configured_investigation
+from concreteinsure.agents.drug_agent import investigate_if_needed, _state, _runner
+from concreteinsure.core import AppError
+from concreteinsure.diagnostics import RuntimeLog, log_context
+from concreteinsure.nat import configured_investigation
 from tests.mfds_fixture import DrugNim, provider
 
 
@@ -19,7 +19,7 @@ async def specialty(nim, drugs, *, names=None, products=None, consent=True, emit
         result = await investigate_if_needed(names=names or [], products=products, nim=nim, drugs=drugs,
                                              emit=emit, consent=consent)
         return {'mode': 'nim-react', 'quotes': [], 'specialist': result}
-    with patch('insurelens.agent.run_investigation', investigate):
+    with patch('concreteinsure.agent.run_investigation', investigate):
         return (await configured_investigation(nim=nim, request={'cloudConsent': consent}))['specialist']
 
 
@@ -157,7 +157,7 @@ async def test_concurrent_specialists_keep_product_evidence_isolated():
                 investigate_if_needed(names=[],products=[p],nim=DrugNim(),drugs=drugs,
                                       emit=lambda *_:None,consent=True) for p in products])
             return {'mode':'nim-react','quotes':[],'results':results}
-        with patch('insurelens.agent.run_investigation',investigate):
+        with patch('concreteinsure.agent.run_investigation',investigate):
             result=await configured_investigation(nim=DrugNim(),request={'cloudConsent':True})
         assert [r['references'][0]['id'] for r in result['results']]==['mfds-'+p['id'] for p in products]
         assert _state.get() is None and _runner.get() is None

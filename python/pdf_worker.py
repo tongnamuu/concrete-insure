@@ -208,7 +208,7 @@ def annotate(data,doc,hits):
                 quads.append(fitz.Quad(ul,ur,ll,lr))
             if quads:
                 a=page.add_highlight_annot(quads);a.set_colors(stroke=(1,.82,.12));a.set_opacity(.3)
-                a.set_info(title='InsureLens',content=hit['quote']);a.update();count+=1
+                a.set_info(title='concreteInsure',content=hit['quote']);a.update();count+=1
             page.set_rotation(rotation)
         return pdf.tobytes(garbage=3,deflate=True),count,skipped
 

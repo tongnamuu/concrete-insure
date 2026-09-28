@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import httpx
-from insurelens.providers import Drugs
+from concreteinsure.providers import Drugs
 from tests.nim_fixture import ScriptedNim
 
 ITEM_ID = '202012345'

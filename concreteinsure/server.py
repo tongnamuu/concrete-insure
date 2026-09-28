@@ -55,10 +55,10 @@ class LocalBoundary:
             record("request.error", status=error.status, **failure_fields(error))
             return await JSONResponse({"error": error.code}, error.status, headers=SECURITY_HEADERS)(scope, receive, send)
         cookies = Request(scope).cookies
-        owner = cookies.get("insurelens_session", "")
+        owner = cookies.get("concreteinsure_session") or cookies.get("insurelens_session", "")
         try:
             UUID(owner)
-            new_cookie = False
+            new_cookie = "concreteinsure_session" not in cookies
         except ValueError:
             owner, new_cookie = str(uuid4()), True
         scope.setdefault("state", {})["owner"] = owner
@@ -80,7 +80,7 @@ class LocalBoundary:
                     if name.lower() != "cache-control" or name not in result_headers:
                         result_headers[name] = value
                 if new_cookie:
-                    result_headers.append("set-cookie", f"insurelens_session={owner}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400")
+                    result_headers.append("set-cookie", f"concreteinsure_session={owner}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400")
             await send(message)
 
         await self.app(scope, bounded_receive, secure_send)
@@ -163,7 +163,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
             diagnostics.write("app.stopped")
             diagnostics.close()
 
-    app = FastAPI(title="InsureLens", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app = FastAPI(title="concreteInsure", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.add_middleware(LocalBoundary)
     app.add_middleware(RequestLogging)
 
@@ -359,7 +359,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
         ensure(all(j['state'] not in ('queued','running') for j in store.jobs(case['id'])), "CASE_BUSY", 429)
         context = None
         if body.conversationId:
-            from insurelens.conversation import model_context
+            from concreteinsure.conversation import model_context
             conversation = store.conversation(case['id'], case['document']['id'])
             ensure(conversation['id'] == body.conversationId, "CONVERSATION_CHANGED", 409)
             ensure(len(conversation['turns']) < 50, "CONVERSATION_TURN_LIMIT", 429)
@@ -498,7 +498,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
                 temporary.replace(output)
                 headers = {"X-Highlight-Count": str(value["count"]), "X-Highlight-Skipped": str(value["skipped"])}
             # Bounded local PDF read keeps the download independent of a following case delete.
-            return Response(output.read_bytes(), media_type="application/pdf", headers={**headers, "Content-Disposition": 'attachment; filename="insurelens-highlighted.pdf"'})
+            return Response(output.read_bytes(), media_type="application/pdf", headers={**headers, "Content-Disposition": 'attachment; filename="concreteinsure-highlighted.pdf"'})
         finally:
             temporary.unlink(missing_ok=True)
             app.state.exports -= 1

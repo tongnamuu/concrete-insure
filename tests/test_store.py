@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from insurelens.core import AppError
-from insurelens.store import Queue, Store
+from concreteinsure.core import AppError
+from concreteinsure.store import Queue, Store
 
 
 def test_persisted_schema_and_restart_ownership(tmp_path):
