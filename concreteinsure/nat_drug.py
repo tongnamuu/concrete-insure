@@ -1,5 +1,6 @@
 """NAT medicine tools and an SDK-backed LangChain client for its native agent."""
 import json
+from uuid import uuid4
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, convert_to_openai_messages
@@ -49,7 +50,7 @@ async def medicine_tools(config: MedicineToolsConfig, builder: Builder):
     group.add_function('inspect_label', inspect_label, input_schema=ProductArgs,
                        description='Inspect original label evidence after ingredients. Required when labelAvailable is true.')
     group.add_function('finish_evidence', finish_evidence, input_schema=EmptyArgs,
-                       description='Finish after all missing names are looked up OR every selected product and available label is inspected. Returns only validated server evidence.')
+                       description='Application-only completion control. Revalidates all required observations and source integrity before returning server evidence.')
     yield group
 
 
@@ -79,13 +80,25 @@ class EvidenceChatModel(BaseChatModel):
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
         state = current_state()
-        original = convert_to_openai_messages(messages)
-        prompt = [{'role': 'system', 'content': SKILL}, *original]
-        response = await state.nim.complete(prompt, kwargs['tools'])
-        call = state.plan(response)
-        # Prose and model-authored evidence never cross this boundary.
+        if state.completion_ready:
+            # NAT still executes its validated return_direct tool, but deciding
+            # to finish is application control flow, not another NIM inference.
+            record('agent.finalizing', agent='drug_evidence', reason='required_evidence_complete')
+            call = {'name': 'medicine__finish_evidence', 'args': {},
+                    'id': 'application-finish-' + uuid4().hex, 'type': 'tool_call'}
+            source = 'application'
+        else:
+            original = convert_to_openai_messages(messages)
+            prompt = [{'role': 'system', 'content': SKILL}, *original]
+            tools = [tool for tool in kwargs['tools']
+                     if tool['function']['name'] != 'medicine__finish_evidence']
+            response = await state.nim.complete(prompt, tools)
+            call = state.plan(response)
+            source = 'model'
+        # Prose and model-authored evidence never cross this boundary. The
+        # internal control message carries no fabricated provider token usage.
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content='', tool_calls=[call],
-                          response_metadata={'finish_reason': 'tool_calls'}))])
+                          response_metadata={'finish_reason': 'tool_calls', 'completion_source': source}))])
 
 
 @register_llm_client(config_type=EvidenceNimConfig, wrapper_type=LLMFrameworkEnum.LANGCHAIN)

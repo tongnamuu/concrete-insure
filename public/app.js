@@ -78,17 +78,32 @@ function quoteCard(hit,result,jobId){
  jump.addEventListener('click',async()=>{state.hits=result.quotes.filter(visibleQuote);state.resultJob=jobId;$('download').disabled=!state.hits.length;state.page=hit.page;await renderPage();const first=hit.segments?.find(s=>s.quad)?.quad;if(first&&state.viewport){const [,y]=state.viewport.convertToViewportPoint(first[0],first[1]);$('pdfScroll').scrollTop=Math.max(0,y-100);}if(innerWidth<681)$('pdfScroll').scrollIntoView({behavior:'smooth'});});
  meta.append(jump);card.append(meta,el('blockquote','',hit.quote));return card;
 }
+function possibleIngredientLink(link,references){
+ if(link.kind!=='ingredient')return false;
+ const facts=references?.find(ref=>ref.id===link.referenceId)?.facts||[];
+ return facts.some(f=>f.kind==='dose_basis'&&f.terms?.includes(link.term))&&!facts.some(f=>f.kind==='ingredient'&&f.terms?.includes(link.term));
+}
 function renderCoverage(result,jobId,byId){
  const panel=el('section','coverage-panel');panel.append(el('h2','','보장 범위 확인'));
  const coverage=result.coverage,used=new Set();
  if(!coverage?.items?.length){panel.append(el('p','','보장 항목과 연결되는 근거를 아직 확인하지 못했습니다.'),el('p','result-note','아래 검색 원문만으로 보장 제외를 뜻하지 않습니다. 지급사유와 해당 특약을 함께 확인해야 합니다.'));return {panel,used};}
- panel.append(el('p','coverage-status','약관에 관련 보장 항목이 명시되어 있습니다.'));
+ const possible=link=>possibleIngredientLink(link,result.references);
+ panel.append(el('p','coverage-status',coverage.items.some(item=>item.links.some(possible))?'관련될 수 있는 보장 항목을 찾았습니다.':'약관에 관련 보장 항목이 명시되어 있습니다.'));
  const kinds={payment:'지급사유 · 보장 조건 원문',definition:'정의 · 성분 · 허가 기준 원문',exclusion:'지급 제외사항 원문',claim:'청구서류 원문'};
  const checks={enrollment:'해당 특약의 실제 가입 여부와 가입금액',period:'진단·처방일과 보험기간·보장개시일',diagnosis:'약관에서 요구하는 진단 기준',treatment:'치료 목적과 처방·치료 사실',limit:'보장 횟수·한도와 이전 지급 내역',approval_date:'약관이 정한 시점의 식약처 허가사항',exclusion:'면책·지급 제외사유',cross_reference:'별표·보통약관 등 참조 조항의 추가 조건'};
  for(const item of coverage.items){
   const title=byId.get(item.titleId);if(!title)continue;
-  const section=el('article','coverage-item');section.append(el('div','coverage-caption','약관에 기재된 보장 항목'),quoteCard(title,result,jobId));used.add(quoteKey(title));
-  for(const link of item.links){const box=el('div','coverage-link');box.append(el('strong','',link.kind==='ingredient'?'성분 근거를 통한 간접 연결':link.kind==='direct_brand'?'상표명 직접 기재':'입력한 항목과 원문 일치'),el('p','',link.kind==='ingredient'?`${link.label} → ${link.term} → 위 보장 항목`:link.label));if(link.kind==='ingredient')box.append(el('p','result-note','제품 성분 근거와 약관의 성분 항목을 연결했습니다. 실제 처방 목적과 지급 조건은 별도 확인이 필요합니다.'));section.append(box);}
+  const section=el('article','coverage-item');section.append(el('div','coverage-caption',item.links.some(possible)?'연결 가능성을 확인할 보장 항목':'약관에 기재된 보장 항목'),quoteCard(title,result,jobId));used.add(quoteKey(title));
+  for(const link of item.links){
+   const box=el('div','coverage-link');
+   if(possible(link)){
+    box.append(el('strong','','성분명 표기에 따른 연결 가능성'),el('p','',`${link.label} — 약관의 ‘${link.term}’ 항목과 연결될 수 있습니다.`),el('p','result-note','공식 성분명과 약관의 표기가 다릅니다. 동일 성분으로 인정되는지와 실제 보장 여부는 보험사에 확인해 주세요.'));
+   }else{
+    box.append(el('strong','',link.kind==='ingredient'?'성분 근거를 통한 간접 연결':link.kind==='direct_brand'?'상표명 직접 기재':'입력한 항목과 원문 일치'),el('p','',link.kind==='ingredient'?`${link.label} → ${link.term} → 위 보장 항목`:link.label));
+    if(link.kind==='ingredient')box.append(el('p','result-note','제품 성분 근거와 약관의 성분 항목을 연결했습니다. 실제 처방 목적과 지급 조건은 별도 확인이 필요합니다.'));
+   }
+   section.append(box);
+  }
   section.append(el('p','coverage-caution','실제 보장은 가입한 특약과 진단·처방 내용, 아래 지급 조건을 확인해야 합니다.'));
   for(const clause of item.clauses){const hits=uniqueQuotesOf(clause.sourceIds.map(id=>byId.get(id)).filter(Boolean));if(!hits.length)continue;const details=el('details','clause-group');details.open=clause.kind==='payment';details.dataset.kind=clause.kind;details.append(el('summary','',kinds[clause.kind]||'관련 원문'));for(const hit of hits){details.append(quoteCard(hit,result,jobId));used.add(quoteKey(hit));}section.append(details);}
   const pending=el('details','coverage-checks');pending.append(el('summary','','실제 보장 확인에 필요한 사항'));const list=el('ul');for(const check of item.checks){const text=checks[check.kind];if(text)list.append(el('li','',`${text} — 확인 필요`));}pending.append(list,el('p','result-note','업로드한 약관과 성분 자료만으로는 위 사실을 확인할 수 없습니다. 참조 조항의 전체 검토도 필요합니다.'));section.append(pending);

@@ -103,3 +103,53 @@ async def test_api_errors_fail_closed(code,error):
     try:
         with pytest.raises(AppError,match=error):await drugs.lookup('시험약')
     finally:await drugs.close()
+
+
+def dose_detail(text='오셀타미비르로서 75 mg을 투여한다.', ingredient='인산 오셀타미비르'):
+    return {'product': {'id': ITEM_ID, 'name': '시험캡슐', 'url': 'https://nedrug.mfds.go.kr/pbp/CCBBB01/getItemDetail?itemSeq='+ITEM_ID},
+            'documents': {'MAIN_ITEM_INGR': ingredient, 'UD_DOC_DATA': xml(text)}, 'retrievedAt': '2026-01-01T00:00:00Z'}
+
+
+def test_dose_basis_is_literal_source_relation_not_salt_normalization():
+    import hashlib
+    detail = dose_detail()
+    ref = reference_from_detail(detail)
+    basis = next(f for f in ref['facts'] if f['kind'] == 'dose_basis')
+    assert basis['terms'] == ['오셀타미비르']
+    assert basis['quote'] == paragraphs(detail['documents']['UD_DOC_DATA'])[basis['paragraph']]
+    assert basis['sourcePath'] == '/DOC/SECTION[1]/PARAGRAPH[1]'
+    assert basis['documentHash'] == hashlib.sha256(detail['documents']['UD_DOC_DATA'].encode()).hexdigest()
+    assert ref['facts'][0]['terms'] == ['인산 오셀타미비르']
+    assert not any(f['kind'] == 'dose_basis' for f in reference_from_detail(detail, include_label=False)['facts'])
+    assert verify_drug_references([ref])
+    # Same extraction applies to another source term, without a brand dictionary.
+    other = reference_from_detail(dose_detail('시험성분으로서 10 mg을 투여한다.', '시험성분염'))
+    assert other['facts'][1]['terms'] == ['시험성분']
+
+
+@pytest.mark.parametrize('text', [
+    '오셀타미비르',  # Occurrence alone does not establish the relation.
+    '오셀타미비르로서 75 mg을 투여하지 않는다.',
+    '오셀타미비르로서 75 mg으로 추정한다.',
+    '다른 약인 오셀타미비르로서 75 mg을 병용한다.',
+    '다른성분으로서 75 mg을 투여한다.',  # Not in this product's ingredient.
+    '오셀타미비르로서 75 정도를 투여한다.',  # No supported dose unit.
+])
+def test_unsupported_dose_relation_remains_unresolved(text):
+    assert not any(f['kind'] == 'dose_basis' for f in reference_from_detail(dose_detail(text))['facts'])
+
+
+def test_attribute_only_indications_retain_source_path_and_prevention_has_no_terms():
+    from concreteinsure.agents.drug_references import document_fragments
+    source = '<DOC title="효능효과"><SECTION title=""><ARTICLE title="1. 소아(일부 연령에는 적용되지 않는다) 및 성인의 인플루엔자 A 및 인플루엔자 B 바이러스 감염증"/><ARTICLE title="2. 인플루엔자 바이러스 감염증의 예방"/></SECTION></DOC>'
+    fragments = document_fragments(source)
+    assert [f['path'] for f in fragments] == ['/DOC/SECTION[1]/ARTICLE[1]/@title', '/DOC/SECTION[1]/ARTICLE[2]/@title']
+    detail = dose_detail(); detail['documents']['EE_DOC_DATA'] = source
+    facts = [f for f in reference_from_detail(detail)['facts'] if f['field'] == 'EE_DOC_DATA']
+    assert facts[0]['terms'] == ['인플루엔자'] and facts[1]['terms'] == []
+    for fact, fragment in zip(facts, fragments):
+        assert fact['quote'] == fragment['text'] and fact['sourcePath'] == fragment['path']
+    assert document_fragments('<DOC><SECTION title="치료"><ARTICLE title="원문 &amp; 제목"><PARAGRAPH>본문</PARAGRAPH></ARTICLE></SECTION></DOC>') == [
+        {'text': '치료', 'path': '/DOC/SECTION[1]/@title'},
+        {'text': '원문 & 제목', 'path': '/DOC/SECTION[1]/ARTICLE[1]/@title'},
+        {'text': '본문', 'path': '/DOC/SECTION[1]/ARTICLE[1]/PARAGRAPH[1]'}]

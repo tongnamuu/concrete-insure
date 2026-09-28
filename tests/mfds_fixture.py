@@ -40,6 +40,7 @@ class DrugNim(ScriptedNim):
     async def complete(self, messages, tools):
         if not any(t['function']['name'].startswith('medicine__') for t in tools):
             return await super().complete(messages, tools)
+        assert all(t['function']['name'] != 'medicine__finish_evidence' for t in tools)
         self.calls.append('drug_complete')
         payload = json.loads(next(m['content'] for m in messages if m['role'] == 'user'))
         done = [(m['tool_calls'][0]['function']['name'], json.loads(m['tool_calls'][0]['function']['arguments']))
@@ -48,7 +49,6 @@ class DrugNim(ScriptedNim):
         if not payload['requiresSelection']:
             steps = [(name, {'product_id': p['product_id']}) for p in payload['selectedProducts']
                      for name in ('inspect_ingredients', 'inspect_label')]
-        steps += [('finish_evidence', {})]
         name, args = next((name, args) for name, args in steps if ('medicine__'+name, args) not in done)
         return {'finish_reason': 'tool_calls', 'message': {'role': 'assistant', 'content': None, 'tool_calls': [
             {'id': 'drug-'+str(len(done)), 'type': 'function', 'function': {'name': 'medicine__'+name, 'arguments': json.dumps(args)}}]}}

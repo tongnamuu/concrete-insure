@@ -233,7 +233,7 @@ class Drugs:
         items, total = await self._items('getDrugPrdtPrmsnDtlInq08', item_seq=identifier)
         ensure(total == 1 and len(items) == 1 and str(items[0].get('ITEM_SEQ')) == identifier, 'MFDS_PRODUCT_MISMATCH', 502)
         item = items[0]
-        documents = {k: item.get(k) or '' for k in ('MAIN_ITEM_INGR', 'ITEM_INGR_NAME', 'EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA')}
+        documents = {k: item.get(k) or '' for k in ('MAIN_ITEM_INGR', 'ITEM_INGR_NAME', 'EE_DOC_DATA', 'UD_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA')}
         ensure(all(isinstance(x, str) and len(x) <= 1_000_000 for x in documents.values()), 'MFDS_DOCUMENT_LIMIT', 502)
         if not documents['MAIN_ITEM_INGR'] and not documents['ITEM_INGR_NAME']:
             for i, row in enumerate(await self.ingredients(identifier)):
