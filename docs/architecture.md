@@ -2,7 +2,7 @@
 
 The final user specification supersedes the earlier claim-screening proposal: no eligibility decision, no claim recommendation, no diagnosis inference, no paraphrase or summary of policy. The backend uses Python FastAPI, the NeMo Microservices Python SDK and native in-process NAT. A separate Python PDF process provides cancellable text-layer geometry and annotation work. JavaScript is confined to the browser and browser tests. NemoClaw remains excluded; web is the only user-facing interface.
 
-The current technology list and user-to-NVIDIA diagrams are maintained in [README](../README.md#사용자-입력부터-nvidia-연동까지); exact versions are pinned in `pyproject.toml`. The default model is `nvidia/nemotron-3.5-lightning-30b-a3b`.
+The core technology list and user-to-NVIDIA diagram are maintained in [README](../README.md#사용자-입력부터-nvidia-연동까지); the detailed selection/resume sequence is in [development.md](development.md#조건부-성분-근거-에이전트); exact versions are pinned in `pyproject.toml`. The default model is `nvidia/nemotron-3.5-lightning-30b-a3b`.
 
 ## Runtime modules
 
@@ -28,7 +28,7 @@ See contracts.md for exact fields. Input is a text-layer policy PDF and a free-t
 
 Nemotron/NIM: AsyncNeMoMicroservices.chat.completions.create using native tool_calls and finish_reason. The official SDK1.5.0 handles inference requests; NAT1.9.0 directly invokes Python modules using a task-local invocation token. NAT and NIM are mandatory for every investigation. A missing key blocks investigation; transient inference timeouts/connection errors/5xx retry once with a 300-second per-attempt deadline; exhausted retries and control-protocol failures terminate the job. The NAT workflow has a 1200-second overall cap; cancellation interrupts both attempts and backoff. Hosted JSON extraction and native tool calls have been tested with a real key using public/synthetic data. See validation.md for full workflow results and limitations. No actual user medical document was used in cloud testing.
 
-MFDS: official DrugPrdtPrmsnInfoService08 with getDrugPrdtPrmsnInq08, getDrugPrdtPrmsnDtlInq08 and conditional getDrugPrdtMcpnDtlInq08. A separately issued MFDS_API_KEY is required; see README for application and restart instructions. The public Swagger on data.go.kr as retrieved2026-09-27 names this v08 endpoint. Decoder preserves ITEM_INGR_NAME; no unsourced salt removal, brand alias or code-to-disease conversion. Product selection is explicit. Main-ingredient string equality or a quote match is never labelled medically/contractually suitable. Disease codes are searched literally; no KCD meanings are invented.
+MFDS: official DrugPrdtPrmsnInfoService08 with getDrugPrdtPrmsnInq08, getDrugPrdtPrmsnDtlInq08 and conditional getDrugPrdtMcpnDtlInq08. A separately issued MFDS_API_KEY is required; see [setup.md](setup.md) for application and restart instructions. The public Swagger on data.go.kr as retrieved2026-09-27 names this v08 endpoint. Decoder preserves ITEM_INGR_NAME; no unsourced salt removal, brand alias or code-to-disease conversion. Product selection is explicit. Main-ingredient string equality or a quote match is never labelled medically/contractually suitable. Disease codes are searched literally; no KCD meanings are invented.
 
 ## Persistence and events
 
