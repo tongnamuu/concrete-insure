@@ -34,7 +34,6 @@ SCHEMAS = {
     'medicine__lookup_products': NameArgs,
     'medicine__inspect_ingredients': ProductArgs,
     'medicine__inspect_label': ProductArgs,
-    'medicine__finish_evidence': EmptyArgs,
 }
 
 
@@ -62,6 +61,18 @@ class DrugState:
     def missing(self):
         return {i: n for i, n in enumerate(self.names)
                 if not any(n.casefold() in p['name'].casefold() for p in self.products)}
+
+    @property
+    def completion_ready(self):
+        """Decide from successful tool state, never from model text or elapsed time."""
+        if self.missing:
+            return set(self.lookups) == set(self.missing)
+        expected = set(range(len(self.products)))
+        if not expected or set(self.details) != expected or set(self.references) != expected:
+            return False
+        return all(i in self.inspected_labels or not any(
+            detail['documents'].get(key) for key in ('EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA'))
+            for i, detail in self.details.items())
 
     def plan(self, response):
         """Reject unsafe calls before framework validation can echo model arguments."""

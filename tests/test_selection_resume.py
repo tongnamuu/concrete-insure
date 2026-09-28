@@ -50,7 +50,7 @@ async def test_resume_skips_input_and_lookup_and_keeps_single_turn(tmp_path):
         assert done['state']=='completed',done
         assert nim.calls.count('chat')==1
         assert not any(e['data'].get('stage')=='input' for e in app.state.store.events(done['id']))
-        assert before==['chat','drug_complete','drug_complete']
+        assert before==['chat','drug_complete']
         assert len(calls)==2 and calls[-1].url.params['item_seq']==ITEM_ID
         transcript=(await client.get(route+'/conversation')).json()
         assert len(transcript['turns'])==1 and transcript['turns'][0]['query']=='조플루자를 처방받았어요'

@@ -40,7 +40,8 @@
 
 - `agent.routed`: `agent=drug_evidence`, `decision=invoke|skip`, `reason=explicit_drug_name|selected_product|no_drug_information`.
 - `agent.tool`: 고정된 도구 이름만 기록한다. 이름/제품 ID와 도구 입력·결과는 기록하지 않는다.
-- `agent.completed`: 구조화된 완료 상태와 단계 수만 기록한다. 모델 사고 과정과 생성 문장은 출력하지 않는다.
+- `agent.finalizing`: 필수 도구 관찰이 모두 모여 코드가 종료 검증으로 넘어갈 때 `reason=required_evidence_complete`만 기록한다. 이 단계는 NIM 호출이 아니며 제공자 응답·토큰 사용량을 만들어 기록하지 않는다.
+- `agent.completed`: 구조화된 완료 상태와 실제 모델 호출 단계 수만 기록한다. 모델 사고 과정과 생성 문장은 출력하지 않는다.
 - NAT 에이전트의 `verbose`는 끄고 별도 추적 exporter를 설정하지 않는다. 모델 도구 인자는 프레임워크 실행 전에 검증하여 검증 예외에 원시 인자가 노출되지 않게 한다.
 
 ## 제품 선택 재개

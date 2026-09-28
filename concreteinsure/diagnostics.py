@@ -16,11 +16,11 @@ _context = ContextVar('concreteinsure_diagnostics', default={})
 EVENTS = {'app.started', 'app.stopped', 'request.completed', 'request.error',
           'job.queued', 'job.started', 'job.stage', 'job.finished', 'job.resumed',
           'operation.started', 'operation.completed', 'operation.failed',
-          'operation.cancelled', 'provider.response', 'provider.retry', 'agent.routed', 'agent.tool', 'agent.completed'}
+          'operation.cancelled', 'provider.response', 'provider.retry', 'agent.routed', 'agent.tool', 'agent.finalizing', 'agent.completed'}
 ENUMS = {
     'agent': {'drug_evidence'},
     'decision': {'invoke', 'skip'},
-    'reason': {'selected_product', 'explicit_drug_name', 'no_drug_information'},
+    'reason': {'selected_product', 'explicit_drug_name', 'no_drug_information', 'required_evidence_complete'},
     'tool': {'lookup_products', 'inspect_ingredients', 'inspect_label', 'finish_evidence'},
     'status_name': {'needs_selection', 'ready', 'unresolved'},
     'category': {'nim', 'mfds', 'pdf'},
