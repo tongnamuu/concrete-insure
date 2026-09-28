@@ -30,7 +30,7 @@ def test_invalid_case_input_rejected_at_module_boundary(case_input):
 
 @pytest.mark.asyncio
 async def test_raw_description_and_exact_confirmed_terms_reach_model_unchanged():
-    description='  조카가 독감 진단을 받았고 조플루자를 처방받았어요.\n처방전은 없어요.  '
+    description='  가상 입력: 질병명 에이, 약품명 비.\n입력의 공백과 줄바꿈을 유지합니다.  '
     confirmed=['처방','성분 에이','J10.1']
     class Nim:
         enabled=True
@@ -38,10 +38,10 @@ async def test_raw_description_and_exact_confirmed_terms_reach_model_unchanged()
             import json
             data=json.loads(messages[-1]['content'])
             assert data['description']==description and data['confirmedTerms']==confirmed
-            return '{"terms":["독감","조플루자"]}'
+            return '{"terms":["질병명 에이","약품명 비"]}'
     result=await understand_input_with_model({'description':description,'confirmedTerms':confirmed,'cloudConsent':True},Nim())
     assert result['description']==description
-    assert result['terms']==['독감','조플루자',*confirmed]
+    assert result['terms']==['질병명 에이','약품명 비',*confirmed]
     assert confirmed==['처방','성분 에이','J10.1']
 
 
@@ -63,7 +63,7 @@ async def test_runtime_input_understanding_never_substitutes_literal_extraction(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('description,selected',[
-    ('가상 사례: 횡단보도를 걷던 보행자에게 오토바이가 부딪혔습니다.', ['횡단보도','보행자','오토바이']),
+    ('가상 사례: 주차장에서 승합차가 기둥에 부딪혔습니다.', ['주차장','승합차','기둥']),
     ('가상 사례: 자전거를 타다가 미끄러졌습니다. 운전자보험 약관을 확인하고 싶어요.', ['자전거','미끄러졌','운전자보험']),
     ('가상 사례: 위층 배관 누수로 천장이 젖었습니다.', ['배관','누수','천장']),
 ])
@@ -87,7 +87,7 @@ async def test_accident_input_rejects_unstated_roles_injuries_and_normalized_ter
         enabled=True
         async def chat(self,messages,**kwargs):return json.dumps({'terms':[invented]},ensure_ascii=False)
     with pytest.raises(AppError,match='UNGROUNDED_TERM'):
-        await understand_input_with_model({'description':'가상 사례: 횡단보도에서 오토바이와 부딪혔습니다.','cloudConsent':True},Nim())
+        await understand_input_with_model({'description':'가상 사례: 주차장에서 승합차와 부딪혔습니다.','cloudConsent':True},Nim())
 
 
 @pytest.mark.asyncio
@@ -95,6 +95,6 @@ async def test_accident_verb_rewrite_fails_even_with_other_valid_terms():
     class Nim:
         enabled=True
         async def chat(self,messages,**kwargs):
-            return '{"terms":["횡단보도","오토바이","부딪힘"]}'
+            return '{"terms":["주차장","승합차","부딪힘"]}'
     with pytest.raises(AppError,match='UNGROUNDED_TERM'):
-        await understand_input_with_model({'description':'가상 사례: 횡단보도에서 오토바이가 부딪혔습니다.','cloudConsent':True},Nim())
+        await understand_input_with_model({'description':'가상 사례: 주차장에서 승합차가 부딪혔습니다.','cloudConsent':True},Nim())

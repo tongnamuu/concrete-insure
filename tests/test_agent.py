@@ -111,13 +111,13 @@ async def test_accident_description_without_medical_data_uses_nat_and_real_pdf(t
     from concreteinsure.nat import configured_investigation
     from concreteinsure.pdf import pdf_operation
     from tests.nim_fixture import ScriptedNim
-    description='가상 사례: 횡단보도를 걷던 보행자에게 오토바이가 부딪혔습니다.'
+    description='가상 사례: 주차장에서 승합차가 기둥에 부딪혔습니다.'
     class AccidentNim(ScriptedNim):
         async def chat(self,messages,**kwargs):
             assert json.loads(messages[-1]['content'])['description']==description
-            return json.dumps({'terms':['횡단보도','오토바이']},ensure_ascii=False)
+            return json.dumps({'terms':['주차장','승합차']},ensure_ascii=False)
     pdf,index=tmp_path/'policy.pdf',tmp_path/'index.json.gz'
-    original='테스트용 가상 약관: 횡단보도에서 오토바이와 충돌한 경우의 조건입니다.'
+    original='테스트용 가상 약관: 주차장에서 승합차와 충돌한 경우의 조건입니다.'
     document=pymupdf.open()
     document.new_page().insert_text((50,70),original,fontname='korea',fontsize=10)
     document.save(pdf)
@@ -125,7 +125,7 @@ async def test_accident_description_without_medical_data_uses_nat_and_real_pdf(t
     await pdf_operation({'op':'index','pdf':str(pdf),'index':str(index)})
     nim=AccidentNim()
     result=await configured_investigation(document={'pdf':str(pdf),'index':str(index),'pages':1},request={'description':description,'cloudConsent':True},nim=nim)
-    assert result['mode']=='nim-react' and result['terms']==['횡단보도','오토바이']
+    assert result['mode']=='nim-react' and result['terms']==['주차장','승합차']
     assert result['quotes'] and result['references']==[] and result['mappings']==[]
     assert all(hit['quote']==original+'\n' for hit in result['quotes'])
     assert all(hit['segments'] for hit in result['quotes'])
