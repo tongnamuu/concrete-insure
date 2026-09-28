@@ -213,24 +213,13 @@ def annotate(data,doc,hits):
         return pdf.tobytes(garbage=3,deflate=True),count,skipped
 
 def main(p):
-    op=p['op'];data=Path(p['pdf']).read_bytes();require(len(data)<=20*1024*1024,'PDF_SIZE_LIMIT')
+    op=p['op'];require(op in {'index','search','sections','context','annotate'},'UNKNOWN_OPERATION');data=Path(p['pdf']).read_bytes();require(len(data)<=20*1024*1024,'PDF_SIZE_LIMIT')
     if op=='index':
         doc=extract(data)
         with gzip.open(p['index'],'wt',encoding='utf8',compresslevel=1) as f:json.dump(doc,f,ensure_ascii=False,separators=(',',':'))
         return {'hash':doc['hash'],'pages':len(doc['pages']),'characters':doc['characters'],'textPages':sum(bool(x['text'].strip()) for x in doc['pages'])}
-    if op=='render':
-        with fitz.open(stream=data,filetype='pdf') as d:
-            require(len(d)<=8,'PRESCRIPTION_PAGE_LIMIT')
-            images=[]
-            for page in d:
-                require(page.rect.width>0 and page.rect.height>0,'INVALID_PDF_PAGE')
-                scale=min(1.5,2400/max(page.rect.width,page.rect.height))
-                pix=page.get_pixmap(matrix=fitz.Matrix(scale,scale),alpha=False)
-                images.append(base64.b64encode(pix.tobytes('png')).decode())
-            return {'images':images}
     with gzip.open(p['index'],'rt',encoding='utf8') as f:doc=json.load(f)
     require(doc['hash']==digest(data),'SOURCE_INTEGRITY')
-    if op=='text':return {'text':'\n'.join(x['text'] for x in doc['pages'])[:50000]}
     if op=='search':return search(doc,p['terms'],**({'pages':p['pages']} if 'pages' in p else {}))
     if op=='sections':return policy_sections(doc,p['anchors'])
     if op=='context':return context(doc,p['page'],p['start'],p.get('end'),p.get('before',0),p.get('after',3),p.get('nextPage',False))

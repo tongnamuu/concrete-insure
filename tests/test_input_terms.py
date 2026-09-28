@@ -22,11 +22,6 @@ async def test_model_terms_must_be_literal_and_description_remains_unmodified():
         async def chat(self,messages,**kwargs):return '{"terms":["독감"]}'
     with pytest.raises(AppError,match='UNGROUNDED_TERM'):await understand_input_with_model({'description':'조플루자를 처방받았습니다.','cloudConsent':True},Bad())
 
-@pytest.mark.asyncio
-async def test_prescription_candidates_are_explicit_drafts_only():
-    from concreteinsure.agents.prescription import prescription_candidates
-    assert await prescription_candidates('제품명: 조플루자\n질병코드: J10.1') == ['조플루자','J10.1']
-    assert await prescription_candidates('타미플루를 복용합니다.') == []
 
 @pytest.mark.parametrize('case_input',[{}, {'query':' ','description':'\n '}, {'description':'x'*4001}, {'description':'독감','diagnosis':'verified'}])
 def test_invalid_case_input_rejected_at_module_boundary(case_input):
@@ -49,18 +44,6 @@ async def test_raw_description_and_exact_confirmed_terms_reach_model_unchanged()
     assert result['terms']==['독감','조플루자',*confirmed]
     assert confirmed==['처방','성분 에이','J10.1']
 
-@pytest.mark.asyncio
-async def test_prescription_no_consent_and_ocr_spelling_are_preserved():
-    from concreteinsure.agents.prescription import prescription_candidates
-    class MustNotCall:
-        enabled=True
-        async def chat(self,messages,**kwargs):pytest.fail('no consent')
-    text='환자: 테스트이름\n제품명: 제품에이75mg\n성분명: 오셑타미비르\n질병코드: J10.1'
-    assert await prescription_candidates(text,nim=MustNotCall())==['제품에이75mg','오셑타미비르','J10.1']
-    class Ungrounded:
-        enabled=True
-        async def chat(self,messages,**kwargs):return '{"terms":["독감"]}'
-    with pytest.raises(AppError,match='UNGROUNDED_TERM'):await prescription_candidates('제품명: 타미플루',nim=Ungrounded(),consent=True)
 
 @pytest.mark.asyncio
 async def test_runtime_input_understanding_never_substitutes_literal_extraction():

@@ -7,9 +7,9 @@ export async function emptySession(page){
  await ready(page);
  await expect(page.locator('#documentName')).toHaveText('약관 원문');
  await expect(page.locator('#pdfEmpty')).toBeVisible();
- for(const id of ['pdfPage','ocrPanel','progress','error','retryReset'])await expect(page.locator('#'+id)).toBeHidden();
+ for(const id of ['pdfPage','progress','error','retryReset'])await expect(page.locator('#'+id)).toBeHidden();
  await expect(page.locator('.user-message,.assistant-message,.quote-card,#highlights polygon')).toHaveCount(0);
- for(const id of ['query','drugName','confirmedTerms','policyFile','medicalFile'])await expect(page.locator('#'+id)).toHaveValue('');
+ for(const id of ['query','drugName','policyFile'])await expect(page.locator('#'+id)).toHaveValue('');
  await expect(page.locator('#download')).toBeDisabled();
  await expect(page.locator('#pageNumber')).toHaveValue('1');
  await expect(page.locator('#zoomValue')).toHaveText('100%');

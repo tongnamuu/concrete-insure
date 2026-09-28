@@ -1,6 +1,5 @@
 """Local FastAPI application; PDF.js is the only JavaScript runtime UI."""
 import asyncio
-import base64
 from contextlib import asynccontextmanager
 import inspect
 import json
@@ -205,7 +204,7 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
 
     @app.get("/api/config")
     async def config():
-        return {"nimEnabled": nim.enabled, "ocrEnabled": bool(getattr(nim, "ocr_enabled", False)), "mfdsEnabled": bool(getattr(drugs, "enabled", False)), "translationEnabled": bool(nim.enabled and getattr(nim, "translation_model", "")), "mode": "nim-react", "orchestrator": "nat", "ready": bool(nim.enabled), "backend": "python", "inferenceClient": "nemo-microservices"}
+        return {"nimEnabled": nim.enabled, "mfdsEnabled": bool(getattr(drugs, "enabled", False)), "mode": "nim-react", "orchestrator": "nat", "ready": bool(nim.enabled), "backend": "python", "inferenceClient": "nemo-microservices"}
 
     @app.post("/api/cases", status_code=201)
     async def create_case(request: Request):
@@ -294,46 +293,6 @@ def create_app(*, root=None, nim=None, drugs=None, pdf=pdf_operation, investigat
         ensure(case["document"], "DOCUMENT_REQUIRED", 409)
         return FileResponse(case["document"]["pdf"], media_type="application/pdf")
 
-    @app.post("/api/cases/{identifier}/ocr", status_code=202)
-    async def upload_prescription(identifier: UUID, request: Request):
-        from .agents.prescription import prescription_candidates
-        case = case_for(identifier, request)
-        data, _, mime = await uploaded(request, 8 * 1024 * 1024)
-        case = case_for(identifier, request)
-        is_pdf, consent = data.startswith(b"%PDF-"), request.headers.get("x-cloud-consent") == "yes"
-        if not is_pdf:
-            ensure(consent and getattr(nim, "ocr_enabled", False), "OCR_CONSENT_OR_CONFIG_REQUIRED", 409)
-        folder = root / case["id"]
-        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-        input_path = folder / f"{uuid4()}.input"
-        index = Path(str(input_path) + ".json.gz")
-        job_id = app.state.store.create_job(case["id"], "ocr")
-
-        async def read_prescription(emit):
-            emit("stage_started", {"stage": "ocr", "message": "진료·처방 자료의 글자를 읽고 있습니다."})
-            try:
-                if not is_pdf:
-                    value = await nim.ocr(data, mime)
-                    return {**value, "candidates": await prescription_candidates(value["text"], nim=nim, consent=consent)}
-                input_path.write_bytes(data)
-                input_path.chmod(0o600)
-                meta = await pdf({"op": "index", "pdf": str(input_path), "index": str(index)})
-                ensure(meta["pages"] <= 8, "PRESCRIPTION_PAGE_LIMIT")
-                if meta["textPages"] == meta["pages"]:
-                    value = await pdf({"op": "text", "pdf": str(input_path), "index": str(index)})
-                    text, method = value["text"], "pdf-text-layer"
-                else:
-                    ensure(consent and getattr(nim, "ocr_enabled", False), "OCR_CONSENT_OR_CONFIG_REQUIRED", 409)
-                    images = await pdf({"op": "render", "pdf": str(input_path)})
-                    results = [await nim.ocr(base64.b64decode(image), "image/png") for image in images["images"]]
-                    text, method = "\n".join(x["text"] for x in results), "ocr"
-                return {"text": text, "candidates": await prescription_candidates(text, nim=nim, consent=consent), "requiresConfirmation": True, "method": method}
-            finally:
-                input_path.unlink(missing_ok=True)
-                index.unlink(missing_ok=True)
-
-        app.state.queue.add(job_id, read_prescription)
-        return {"jobId": job_id}
 
     @app.post("/api/cases/{identifier}/drugs")
     async def lookup_drug(identifier: UUID, request: Request, body: DrugLookupRequest):

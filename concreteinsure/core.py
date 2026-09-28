@@ -29,7 +29,6 @@ class QueryRequest(BaseModel):
     confirmedTerms: list[Term] = Field(default_factory=list, max_length=20)
     drugIds: list[DrugId] = Field(default_factory=list, max_length=5)
     cloudConsent: bool = False
-    translation: bool = False
     conversationId: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")] | None = None
 
     @field_validator("confirmedTerms")

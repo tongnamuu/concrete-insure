@@ -144,7 +144,7 @@ async def test_http_job_correlation_no_bodies_cookies_or_raw_paths(tmp_path, mon
         async with measured('nim', 'chat'):
             await asyncio.sleep(.01)
         return {'quotes': [], 'mode': 'nim-react'}
-    app = create_app(root=tmp_path, nim=SimpleNamespace(enabled=True, translation_model=''),
+    app = create_app(root=tmp_path, nim=SimpleNamespace(enabled=True),
                      drugs=SimpleNamespace(enabled=False), investigate=investigate)
     async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
         base_url='http://localhost', headers={'X-Local-Request': '1', 'X-Request-ID': SECRET}) as client:

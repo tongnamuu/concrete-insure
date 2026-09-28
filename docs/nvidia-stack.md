@@ -3,7 +3,7 @@
 | 기술 | 실제 역할 | 구현 |
 |---|---|---|
 | Nemotron | 명시된 입력 요소 선택, 허용 도구 호출 | 기본 `nvidia/nemotron-3.5-lightning-30b-a3b` |
-| NIM | hosted 모델 추론, 선택적 image OCR | 추론은 NeMo SDK, OCR은 별도 HTTP 계약 |
+| NIM | hosted 모델 추론 | NeMo SDK로 구조화 JSON·함수 도구 호출 |
 | NeMo Microservices Python SDK | NIM 요청을 보내는 공식 Python 클라이언트 | `nemo-microservices==1.5.0`, `AsyncNeMoMicroservices` |
 | NVIDIA NeMo Agent Toolkit | Python 서브에이전트 실행을 감싸는 등록 workflow | `nvidia-nat==1.9.0`, 필수 실행, Node 중계 없음 |
 | Agent Skills / skills.sh | 도구별 사용 지침과 Python JSON CLI | `skills/`의 SKILL.md 형식 |
@@ -27,7 +27,6 @@ SDK 1.5.0에서 확인한 실제 호출은 `client.chat.completions.create(...)`
 - [NAT plugin API](https://docs.nvidia.com/nemo/agent-toolkit/latest/extend/plugin-api.html)
 - [DLI ReAct Loop](https://nvdli.github.io/NemoClawDLI/nemoclaw/01b-react.html#the-react-loop)
 - [Nemotron 3.5 Lightning NIM](https://docs.nvidia.com/nim/large-language-models/2.0.10/get-started/advanced/get-started-nemotron-3.5-lightning.html)
-- [OCR API](https://docs.nvidia.com/nim/ingestion/image-ocr/latest/use-the-api.html)
 - [NVIDIA Agent Skills](https://github.com/NVIDIA/skills), [skills.sh](https://skills.sh/docs), [SkillSpector](https://github.com/NVIDIA/SkillSpector)
 
 범용 `build.nvidia.com Skill API`의 검증된 실행 규약은 확인하지 못해 가짜 endpoint를 추가하지 않았습니다. 공식 모델 endpoint와 공개 스킬 형식을 사용합니다. 실제 호출 성공과 미검증 옵션은 [validation.md](validation.md)에 기록합니다.

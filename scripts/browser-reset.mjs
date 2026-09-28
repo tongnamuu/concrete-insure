@@ -62,14 +62,12 @@ try{
   await page.reload();await emptySession(page);await removed(saved);
   assert.equal((await context.cookies(server.base)).find(cookie=>cookie.name==='concreteinsure_session').value,owner.value);
  }
- // Successful evidence, source files, OCR drafts and unsent text all disappear.
+ // Successful evidence, source files and unsent text all disappear.
  await upload();await send('조플루자를 처방받았어요');await expect(page.locator('.drug-selection')).toBeVisible({timeout:30000});
  await page.locator('.drug-selection input[type=checkbox]').first().check();
  await page.getByRole('button',{name:'선택한 제품으로 계속'}).click();await acceptConsent(page);
  await expect(page.locator('.investigation-result')).toBeVisible({timeout:30000});await expect(page.locator('#progress')).toBeHidden();
  await page.locator('.quote-card button').first().click();await expect(page.locator('#highlights polygon').first()).toBeAttached();
- await page.locator('#medicalFile').setInputFiles(pdf);await acceptConsent(page);await expect(page.locator('#ocrPanel')).toBeVisible({timeout:30000});await expect(page.locator('#progress')).toBeHidden();
- await page.locator('#confirmedTerms').fill('oseltamivir');await page.locator('#confirmTerms').click();
  await page.locator('#query').fill('아직 보내지 않은 질문');await page.locator('.drug-section summary').click();await page.locator('#drugName').fill('타미플루');
  saved=await snapshot();
  // Migrate the previous browser version's shared localStorage pointer by deleting it.
@@ -79,7 +77,7 @@ try{
  await upload();saved=await snapshot();let failDelete=true;
  await page.route(`**/api/cases/${saved.id}`,route=>route.request().method()==='DELETE'&&failDelete?route.fulfill({status:503,contentType:'application/json',body:'{"error":"REQUEST_FAILED"}'}):route.continue());
  await page.reload();await expect(page.locator('#retryReset')).toBeVisible();
- for(const id of ['send','policyFile','medicalFile','drugName','clearCase'])await expect(page.locator('#'+id)).toBeDisabled();
+ for(const id of ['send','policyFile','drugName','clearCase'])await expect(page.locator('#'+id)).toBeDisabled();
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case')),saved.id);
  assert.equal((await page.request.get(`${server.base}/api/cases/${saved.id}`)).status(),200);
  failDelete=false;await page.locator('#retryReset').click();await emptySession(page);await removed(saved);
@@ -92,5 +90,5 @@ try{
  saved=await snapshot();await page.request.delete(`${server.base}/api/cases/${saved.id}`,{headers:{'X-Local-Request':'1'}});
  await page.reload();await emptySession(page);await removed(saved);
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({ok:true,resetPendingSelection:true,resetEvidenceAndOcr:true,resetUnsentInputs:true,serverFilesAndRecordsRemoved:true,legacyPointerCleaned:true,previousBrandCleanup:true,unrelatedTabPreserved:true,cleanupFailureRetry:true,runningJobCancelled:true,newSearchCompletes:true,stalePointerHandled:true,browserErrors:errors}));
+ console.log(JSON.stringify({ok:true,resetPendingSelection:true,resetEvidence:true,resetUnsentInputs:true,serverFilesAndRecordsRemoved:true,legacyPointerCleaned:true,previousBrandCleanup:true,unrelatedTabPreserved:true,cleanupFailureRetry:true,runningJobCancelled:true,newSearchCompletes:true,stalePointerHandled:true,browserErrors:errors}));
 }finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}

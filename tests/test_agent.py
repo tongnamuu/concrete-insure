@@ -45,7 +45,6 @@ async def test_repeat_refused_and_explicit_finish_supported():
     assert result['quotes']==[HIT]
 
 
-
 @pytest.mark.asyncio
 async def test_empty_source_is_unresolved_not_coverage_denial():
     async def empty(payload):return {'hits':[],'truncated':False}
@@ -53,17 +52,12 @@ async def test_empty_source_is_unresolved_not_coverage_denial():
     assert result['quotes']==[] and result['coverage']['status']=='unresolved'
 
 @pytest.mark.asyncio
-async def test_step_limit_and_translation_boundary():
+async def test_step_limit():
     class Many(Nim):
         async def chat(self,messages,model=None,**kwargs):return json.dumps({'terms':['alpha','beta','gamma','delta','epsilon','zeta','theta','iota','kappa']})
     request={**REQUEST,'query':'alpha beta gamma delta epsilon zeta theta iota kappa'}
     plans=[call(args={'ids':[i]},ident=str(i)) for i in range(8)]
     with pytest.raises(AppError,match='AGENT_STEP_LIMIT'):await run(Many(plans),request)
-    class Translated(Nim):
-        async def gloss(self,terms):return [{'id':0,'original':'changed','english':'flu'}]
-    with pytest.raises(AppError,match='TRANSLATION_BOUNDARY'):await run(Translated([]),{**REQUEST,'translation':True})
-
-
 
 
 @pytest.mark.asyncio
