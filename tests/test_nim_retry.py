@@ -5,9 +5,9 @@ from io import StringIO
 import httpx
 import pytest
 
-from insurelens.core import AppError
-from insurelens.diagnostics import RuntimeLog, log_context
-from insurelens.providers import Nvidia
+from concreteinsure.core import AppError
+from concreteinsure.diagnostics import RuntimeLog, log_context
+from concreteinsure.providers import Nvidia
 from tests.test_providers import completion
 
 
@@ -52,7 +52,7 @@ async def test_exhausted_retries_make_exactly_two_http_requests(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_each_attempt_has_its_own_deadline_and_sse_continues(monkeypatch):
-    from insurelens.progress import model_progress
+    from concreteinsure.progress import model_progress
     monkeypatch.setattr(Nvidia,'RETRY_DELAY_SECONDS',0)
     count=0;cancelled=asyncio.Event();events=[]
     async def handle(request):
@@ -72,7 +72,7 @@ async def test_each_attempt_has_its_own_deadline_and_sse_continues(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cancelling_backoff_prevents_second_request(monkeypatch):
-    import insurelens.providers as module
+    import concreteinsure.providers as module
     monkeypatch.setattr(Nvidia,'RETRY_DELAY_SECONDS',30)
     retry=asyncio.Event();count=0
     def record(event,**kwargs):

@@ -1,4 +1,7 @@
-# InsureLens
+# concreteInsure
+
+화면 표기는 `concreteInsure`, 패키지·실행 명령은 `concrete-insure`, Python 모듈은 `concreteinsure`입니다.
+이전 이름으로 설치한 작업 폴더를 갱신할 때는 자동 생성된 `insure_lens.egg-info/` 폴더를 삭제하고 아래의 `uv sync`를 실행하세요. 오래된 NAT 진입점이 함께 검색되는 것을 방지합니다.
 
 보험약관 PDF와 사용자 상황 설명으로 관련 보장 항목과 근거를 찾아 보여 주는 웹 에이전트입니다. **처방전·약봉투·의료 이미지는 필수가 아닙니다.** 약관 문구는 원문 그대로 표시하고 PDF에 형광펜 주석으로 저장합니다. **약관에 명시된 보장 항목과 성분 근거를 통한 연결**을 표시하며, 실제 가입·진단·처방·지급 조건 충족 여부는 별도 확인 대상으로 둡니다. 보험금 지급 여부나 질병을 추정하지 않습니다.
 
@@ -14,7 +17,7 @@ uv run python scripts/install-git-hooks.py
 npm ci
 # 처음 설치한 경우에만 .env.example을 .env로 복사합니다.
 # 기존 .env가 있으면 그대로 사용합니다.
-uv run insure-lens
+uv run concrete-insure
 ```
 
 브라우저에서 http://127.0.0.1:8000 을 엽니다. 기존 `npm start`도 Python 서버를 실행하도록 연결했습니다. 한 프로젝트의 데이터 디렉터리에는 서버를 하나만 실행하세요.
@@ -38,7 +41,7 @@ NeMo Microservices SDK는 서비스에 접속하는 클라이언트입니다. SD
 1. [공공데이터포털의 식품의약품안전처_의약품 제품 허가정보](https://www.data.go.kr/data/15095677/openapi.do)에 로그인하고 **활용신청**을 합니다.
 2. 해당 서비스의 활용 승인을 확인한 뒤 **일반 인증키(Decoding)**를 확인합니다. 다른 식약처 서비스에만 승인된 키로는 이 서비스를 호출하지 못할 수 있습니다.
 3. 프로젝트의 `.env`에 `MFDS_API_KEY=발급받은키`를 설정합니다. 키는 Git에 추가하지 않습니다. 기존 `.env`를 예시 파일로 덮어쓰지 않습니다.
-4. 실행 중인 서버를 종료하고 `uv run insure-lens`로 다시 시작합니다. 서버는 시작할 때 환경변수를 읽습니다.
+4. 실행 중인 서버를 종료하고 `uv run concrete-insure`로 다시 시작합니다. 서버는 시작할 때 환경변수를 읽습니다.
 5. 화면의 **상표명으로 공식 성분 확인 → 제품 찾기**로 조회를 확인합니다. 설정 여부와 실제 서비스 인증 성공은 별개입니다.
 
 사용하는 서비스는 `DrugPrdtPrmsnInfoService08`입니다. `getDrugPrdtPrmsnInq08`로 제품 후보를 찾고, 사용자가 품목을 선택하면 `getDrugPrdtPrmsnDtlInq08`로 성분·효능효과·주의사항 원문을 조회합니다. 주성분 필드가 없을 때만 `getDrugPrdtMcpnDtlInq08`로 보완합니다. 키는 이 공식 API에만 전송하고 콘솔·화면에 출력하지 않습니다.
@@ -83,7 +86,7 @@ NAT 워크플로 안에 `drug_evidence_agent`를 별도 함수로 등록하고 N
 
 | Python 모듈 | 책임 |
 |---|---|
-| `insurelens/server.py`, `store.py` | 업로드·소유권·SQLite·작업 취소·재연결 가능한 SSE |
+| `concreteinsure/server.py`, `store.py` | 업로드·소유권·SQLite·작업 취소·재연결 가능한 SSE |
 | `conversation.py` | 서버에 저장된 성공 대화와 원문을 제한된 길이의 모델 맥락으로 구성 |
 | `providers.py` | 실제 `AsyncNeMoMicroservices` SDK 추론, OCR, 식약처 조회 |
 | `nat.py` | 등록된 NAT workflow에서 Python 에이전트를 직접 실행 |
@@ -96,7 +99,7 @@ ReAct의 모델 출력은 허용된 도구와 ID를 고르는 데만 사용합�
 
 ## 스킬과 테스트
 
-웹의 성분 에이전트와 CLI 스킬은 같은 식약처 제공자와 원문 검증 모듈을 사용합니다. CLI는 개별 도구 어댑터이며 에이전트 실행 경로는 웹의 NAT 워크플로입니다. 웹이 매번 별도 CLI 프로세스를 실행하는 구조는 아닙니다. 세 스킬은 `ocr-prescription`, `drug-ingredient-resolver`, `pdf-iso32000-annotator`이며 각 `SKILL.md`에 JSON 입출력과 사용법이 있습니다. 상위 원문 규칙은 `insure-lens-source`입니다.
+웹의 성분 에이전트와 CLI 스킬은 같은 식약처 제공자와 원문 검증 모듈을 사용합니다. CLI는 개별 도구 어댑터이며 에이전트 실행 경로는 웹의 NAT 워크플로입니다. 웹이 매번 별도 CLI 프로세스를 실행하는 구조는 아닙니다. 세 스킬은 `ocr-prescription`, `drug-ingredient-resolver`, `pdf-iso32000-annotator`이며 각 `SKILL.md`에 JSON 입출력과 사용법이 있습니다. 상위 원문 규칙은 `concrete-insure-source`입니다.
 
 ```sh
 uv run --extra dev pytest -q

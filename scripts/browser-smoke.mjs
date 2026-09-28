@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {startPythonTestServer,python} from './python-test-server.mjs';
-const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-browser-'));
+const temp=await mkdtemp(path.join(os.tmpdir(),'concreteinsure-browser-'));
 const pdf=path.join(temp,'policy.pdf');
 const term='oseltamivir';
 execFileSync(python,['-c',`import pymupdf as fitz,sys\nd=fitz.open()\np=d.new_page()\np.insert_text((72,72),'약품명: oseltamivir',fontname='korea')\nd.save(sys.argv[1])`,pdf]);
@@ -16,12 +16,12 @@ const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECU
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
 try{
-await page.goto(base);await ready(page);await expect(page.locator('#availability')).toHaveText('검색 준비 완료');
+await page.goto(base);await ready(page);await expect(page).toHaveTitle('concreteInsure');await expect(page.locator('.brand')).toHaveAttribute('aria-label','concreteInsure 홈');await expect(page.locator('#availability')).toHaveText('검색 준비 완료');
 await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText(path.basename(pdf),{timeout:120000});await expect(page.locator('#pdfCanvas')).toBeVisible();await expect(page.locator('.textLayer')).not.toBeEmpty({timeout:30000});
 await page.locator('#query').fill(term);await page.locator('#send').click();await acceptConsent(page);await expect(page.locator('.quote-card').first()).toBeVisible({timeout:120000});await expect(page.locator('.quote-card blockquote').first()).toContainText(term);
 await page.locator('.quote-card button').first().click();await page.locator('#zoomIn').click();await expect(page.locator('#zoomValue')).toHaveText('120%');await expect(page.locator('#highlights polygon').first()).toBeAttached();
-const downloadPromise=page.waitForEvent('download');await page.locator('#download').click();const download=await downloadPromise;await download.saveAs(path.join(temp,'marked.pdf'));
-const validation=execFileSync(python,['-c',`import pymupdf as fitz,sys\nd=fitz.open(sys.argv[1]); assert sum(len(list(p.annots() or [])) for p in d)>0; assert sys.argv[2] in ''.join(p.get_text() for p in d);print('standard annotations verified')`,path.join(temp,'marked.pdf'),term],{encoding:'utf8'}).trim();
+const downloadPromise=page.waitForEvent('download');await page.locator('#download').click();const download=await downloadPromise;assert.equal(download.suggestedFilename(),'concreteInsure-policy.pdf');await download.saveAs(path.join(temp,'marked.pdf'));
+const validation=execFileSync(python,['-c',`import pymupdf as fitz,sys\nd=fitz.open(sys.argv[1]); assert sum(len(list(p.annots() or [])) for p in d)>0; assert all(a.info['title']=='concreteInsure' for p in d for a in (p.annots() or [])); assert sys.argv[2] in ''.join(p.get_text() for p in d);print('standard annotations verified')`,path.join(temp,'marked.pdf'),term],{encoding:'utf8'}).trim();
 await page.locator('#clearResults').click();await expect(page.locator('.quote-card')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();
 await page.locator('#query').fill(term);await page.locator('#send').click();await acceptConsent(page);await expect(page.locator('.quote-card').first()).toBeVisible({timeout:30000});await page.locator('#clearResults').click();await expect(page.locator('.quote-card')).toHaveCount(0);await expect(page.locator('#highlights polygon')).toHaveCount(0);await expect(page.locator('#download')).toBeDisabled();await expect(page.locator('#pdfCanvas')).toBeVisible();
 await page.locator('#query').fill(term);await page.locator('#send').click();await acceptConsent(page);await expect(page.locator('.quote-card').first()).toBeVisible({timeout:30000});

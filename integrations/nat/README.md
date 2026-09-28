@@ -1,7 +1,7 @@
 # Native Python NAT integration
 
 Install from the project root: `uv pip install --python .venv/bin/python -e .`.
-The root package registers `insurelens.nat` in `nat.components`; `_type: insurelens_python` runs the Python evidence agent directly.
+The root package registers `concreteinsure.nat` in `nat.components`; `_type: concreteinsure_python` runs the Python evidence agent directly.
 
 NAT is a required project dependency and the only investigation runtime. There is no AGENT_RUNNER setting. Missing NAT fails at startup; a missing NVIDIA key or consent blocks investigation.
 

@@ -13,12 +13,12 @@ from nat.cli.register_workflow import register_function_group, register_llm_clie
 from nat.data_models.function import FunctionGroupBaseConfig
 from nat.data_models.llm import LLMBaseConfig
 
-from insurelens.agents.drug_agent import SKILL, EmptyArgs, NameArgs, ProductArgs, current_state
-from insurelens.core import AppError
-from insurelens.diagnostics import record
+from concreteinsure.agents.drug_agent import SKILL, EmptyArgs, NameArgs, ProductArgs, current_state
+from concreteinsure.core import AppError
+from concreteinsure.diagnostics import record
 
 
-class MedicineToolsConfig(FunctionGroupBaseConfig, name='insurelens_medicine_tools'):
+class MedicineToolsConfig(FunctionGroupBaseConfig, name='concreteinsure_medicine_tools'):
     pass
 
 
@@ -53,7 +53,7 @@ async def medicine_tools(config: MedicineToolsConfig, builder: Builder):
     yield group
 
 
-class EvidenceNimConfig(LLMBaseConfig, name='insurelens_evidence_nim'):
+class EvidenceNimConfig(LLMBaseConfig, name='concreteinsure_evidence_nim'):
     pass
 
 
@@ -69,7 +69,7 @@ class EvidenceChatModel(BaseChatModel):
 
     @property
     def _llm_type(self):
-        return 'insurelens_nemo_microservices'
+        return 'concreteinsure_nemo_microservices'
 
     def bind_tools(self, tools, **kwargs):
         return self.bind(tools=[convert_to_openai_tool(t) for t in tools])

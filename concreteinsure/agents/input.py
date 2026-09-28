@@ -1,9 +1,9 @@
 import json
-from insurelens.conversation import literal_context
-from insurelens.core import literal_terms, grounded_terms, ensure, is_conversational_term, QueryRequest
+from concreteinsure.conversation import literal_context
+from concreteinsure.core import literal_terms, grounded_terms, ensure, is_conversational_term, QueryRequest
 
 
-from insurelens.providers import Nvidia
+from concreteinsure.providers import Nvidia
 
 INPUT_TIMEOUT_SECONDS = Nvidia.TIMEOUT_SECONDS
 INPUT_SYSTEM = (

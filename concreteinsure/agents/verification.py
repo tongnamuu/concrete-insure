@@ -1,6 +1,6 @@
 import math
 import unicodedata
-from insurelens.core import ensure, NOTICE
+from concreteinsure.core import ensure, NOTICE
 from .drug_references import verify_drug_references
 
 

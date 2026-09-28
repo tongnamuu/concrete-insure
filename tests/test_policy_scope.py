@@ -1,4 +1,4 @@
-from insurelens.agents.policy_scope import describe_policy_scope
+from concreteinsure.agents.policy_scope import describe_policy_scope
 
 def hit(ident,text):return {'id':ident,'quote':text}
 def section(payment='독감으로 진단받고 치료하면 보험금을 지급합니다.'):

@@ -4,11 +4,11 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from insurelens.conversation import model_context, MAX_CONTEXT_CHARS
-from insurelens.core import AppError
-from insurelens.agents.input import understand_input_with_model
-from insurelens.server import create_app
-from insurelens.store import Store
+from concreteinsure.conversation import model_context, MAX_CONTEXT_CHARS
+from concreteinsure.core import AppError
+from concreteinsure.agents.input import understand_input_with_model
+from concreteinsure.server import create_app
+from concreteinsure.store import Store
 from tests.nim_fixture import ConversationNim
 from tests.test_server import upload, wait
 

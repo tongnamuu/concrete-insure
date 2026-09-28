@@ -3,11 +3,11 @@ import json
 import httpx
 import pytest
 
-from insurelens.nat import configured_investigation as run_investigation
-from insurelens.agents.input import understand_input_with_model
-from insurelens.conversation import model_context
-from insurelens.core import AppError
-from insurelens.server import create_app
+from concreteinsure.nat import configured_investigation as run_investigation
+from concreteinsure.agents.input import understand_input_with_model
+from concreteinsure.conversation import model_context
+from concreteinsure.core import AppError
+from concreteinsure.server import create_app
 from tests.mfds_fixture import provider, DrugNim, ITEM_ID
 from tests.test_server import fixture_pdf, wait
 

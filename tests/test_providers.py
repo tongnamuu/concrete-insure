@@ -7,8 +7,8 @@ import httpx
 import pytest
 from PIL import Image
 from nemo_microservices import AsyncNeMoMicroservices
-from insurelens.providers import Nvidia, Drugs
-from insurelens.core import AppError
+from concreteinsure.providers import Nvidia, Drugs
+from concreteinsure.core import AppError
 
 ENV = {'NVIDIA_API_KEY': 'test-only-placeholder'}
 
@@ -196,7 +196,7 @@ async def test_sdk_redirect_does_not_forward_credentials():
 
 @pytest.mark.asyncio
 async def test_input_uses_explicit_schema_and_preserves_source_validation():
-    from insurelens.agents.input import understand_input_with_model, TERMS_SCHEMA
+    from concreteinsure.agents.input import understand_input_with_model, TERMS_SCHEMA
     bodies = []
     response = {'terms': ['조플루자']}
     def handler(request):
@@ -224,7 +224,7 @@ async def test_input_uses_explicit_schema_and_preserves_source_validation():
 
 @pytest.mark.asyncio
 async def test_input_deadline_retries_once_without_local_search(monkeypatch):
-    from insurelens.agents import input as input_agent
+    from concreteinsure.agents import input as input_agent
     assert input_agent.INPUT_TIMEOUT_SECONDS == 300
     monkeypatch.setattr(input_agent, 'INPUT_TIMEOUT_SECONDS', .02)
     cancelled = asyncio.Event()

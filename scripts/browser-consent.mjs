@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {startPythonTestServer,python} from './python-test-server.mjs';
 import {acceptConsent} from './consent-test-helper.mjs';
-const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-consent-'));
+const temp=await mkdtemp(path.join(os.tmpdir(),'concreteinsure-consent-'));
 const pdf=path.join(temp,'policy.pdf');
 execFileSync(python,['-c',"import pymupdf as f,sys; d=f.open();p=d.new_page();p.insert_text((50,100),'독감 인플루엔자',fontname='korea');d.save(sys.argv[1])",pdf]);
 const server=await startPythonTestServer(path.join(temp,'data'));
@@ -18,7 +18,7 @@ const requests=[],ocr=[],errors=[];
 page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/investigations'))requests.push(r.postDataJSON());if(r.method()==='POST'&&r.url().endsWith('/ocr'))ocr.push(r.url());});
 page.on('pageerror',e=>errors.push(e.message));
 const consentText='NVIDIA 서비스로 현재·이전 대화의 질문·상황 설명·검색 후보·약관 발췌문 또는 처방 이미지를 전송하는 데 동의합니다. 의약품 조회 시 약품명과 품목코드는 식품의약품안전처 API로 전송됩니다.';
-async function unchangedJobs(count){const id=await page.evaluate(()=>sessionStorage.getItem('insure-lens-case'));const response=await page.request.get(`${server.base}/api/cases/${id}`);assert.equal((await response.json()).jobs.filter(j=>j.kind==='investigation').length,count);}
+async function unchangedJobs(count){const id=await page.evaluate(()=>sessionStorage.getItem('concrete-insure-case'));const response=await page.request.get(`${server.base}/api/cases/${id}`);assert.equal((await response.json()).jobs.filter(j=>j.kind==='investigation').length,count);}
 try{
  await page.goto(server.base);await ready(page);await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('#documentName')).toHaveText('policy.pdf',{timeout:30000});
  await expect(page.locator('.settings')).toHaveCount(0);await expect(page.locator('#translation')).toHaveCount(0);

@@ -1,7 +1,7 @@
 import asyncio
 import pytest
-from insurelens.progress import model_progress
-from insurelens.core import AppError
+from concreteinsure.progress import model_progress
+from concreteinsure.core import AppError
 
 
 @pytest.mark.asyncio

@@ -1,1 +1,1 @@
-"""InsureLens isolated test fixtures; never loaded by production configuration."""
+"""concreteInsure isolated test fixtures; never loaded by production configuration."""

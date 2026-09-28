@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 import httpx
 import pytest
 
-from insurelens.core import AppError
-from insurelens.server import create_app
+from concreteinsure.core import AppError
+from concreteinsure.server import create_app
 from tests.mfds_fixture import DrugNim, provider, ITEM_ID
 from tests.test_server import fixture_pdf, wait
 

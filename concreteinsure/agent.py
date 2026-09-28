@@ -1,17 +1,17 @@
 import asyncio
 import json
 from pathlib import Path
-from insurelens.core import ensure, AppError
-from insurelens.pdf import pdf_operation
-from insurelens.progress import model_progress
-from insurelens.agents.input import understand_input_with_model
-from insurelens.agents.drug import identify_drugs
-from insurelens.agents.drug_agent import investigate_if_needed
-from insurelens.agents.retrieval import retrieve_policy
-from insurelens.agents.policy_scope import inspect_policy_scope
-from insurelens.agents.verification import assemble_evidence
+from concreteinsure.core import ensure, AppError
+from concreteinsure.pdf import pdf_operation
+from concreteinsure.progress import model_progress
+from concreteinsure.agents.input import understand_input_with_model
+from concreteinsure.agents.drug import identify_drugs
+from concreteinsure.agents.drug_agent import investigate_if_needed
+from concreteinsure.agents.retrieval import retrieve_policy
+from concreteinsure.agents.policy_scope import inspect_policy_scope
+from concreteinsure.agents.verification import assemble_evidence
 
-SKILL = (Path(__file__).resolve().parents[1] / 'skills/insure-lens-source/SKILL.md').read_text()
+SKILL = (Path(__file__).resolve().parents[1] / 'skills/concrete-insure-source/SKILL.md').read_text()
 TOOLS = [{'type': 'function', 'function': {'name': name, 'description': description, 'parameters': {'type': 'object', 'properties': props, 'required': list(props), 'additionalProperties': False}}} for name, description, props in [
     ('search_policy', 'Find original policy evidence using supplied explicit term IDs only.', {'ids': {'type': 'array', 'items': {'type': 'integer'}, 'minItems': 1, 'maxItems': 10}}),
     ('read_context', 'Read original surrounding blocks for an existing source hit ID.', {'hitId': {'type': 'string'}}),
@@ -40,7 +40,7 @@ async def run_investigation(*, document, request, products=None, nim=None, emit=
         facts = await model_progress(understand_input_with_model(request, nim, conversation=conversation),
                                      emit=emit, stage='input', label='검색 1단계')
     else:
-        from insurelens.selection import validate_saved_facts
+        from concreteinsure.selection import validate_saved_facts
         facts = validate_saved_facts(resume_facts, request, conversation)
     if products or facts['drugNames']:
         emit('stage_started', {'stage': 'drug_reference', 'message': '검색 2단계'})

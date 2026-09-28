@@ -4,8 +4,8 @@ import sys
 
 import pytest
 
-from insurelens.core import AppError
-from insurelens.pdf import pdf_operation
+from concreteinsure.core import AppError
+from concreteinsure.pdf import pdf_operation
 
 
 @pytest.mark.parametrize("cancel", [False, True])

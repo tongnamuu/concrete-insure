@@ -6,8 +6,8 @@ import pymupdf
 import pytest
 import pytest_asyncio
 
-from insurelens.core import AppError
-from insurelens.server import create_app
+from concreteinsure.core import AppError
+from concreteinsure.server import create_app
 from tests.nim_fixture import ScriptedNim
 
 
@@ -51,7 +51,7 @@ async def test_full_api_and_persisted_events(web):
     response = await client.post("/api/cases")
     assert response.status_code == 201
     case = response.json()["id"]
-    assert "HttpOnly" in response.headers.get("set-cookie", "") or "insurelens_session" in client.cookies
+    assert "HttpOnly" in response.headers.get("set-cookie", "") or "concreteinsure_session" in client.cookies
     indexed = await upload(client, case)
     doc = indexed["result"]["document"]
     assert doc["pages"] == 1 and "pdf" not in doc and "index" not in doc
@@ -96,6 +96,24 @@ async def test_upload_drafts_and_source_guards(web):
     await upload(client, case)
     for payload in ({"query": "   "}, {"query": "독감", "cloudConsent": "true"}, {"query": "독감", "injected": 1}, {"query": "독감", "drugIds": ["200001234"], "cloudConsent":True}):
         assert (await client.post(f"/api/cases/{case}/investigations", json=payload)).status_code == 400
+
+
+async def test_legacy_session_cookie_preserves_cleanup_ownership(web):
+    from uuid import uuid4
+    app, client = web
+    owner = str(uuid4())
+    case = app.state.store.create(owner)['id']
+    route = f'/api/cases/{case}'
+    migrated = await client.get(route, headers={'Cookie': f'insurelens_session={owner}'})
+    assert migrated.status_code == 200
+    assert client.cookies['concreteinsure_session'] == owner
+    assert 'HttpOnly' in migrated.headers['set-cookie']
+    assert 'SameSite=Strict' in migrated.headers['set-cookie']
+    assert (await client.get(route)).status_code == 200
+    # A different current owner must not gain access through the legacy cookie.
+    other = str(uuid4())
+    assert (await client.get(route, headers={'Cookie': f'concreteinsure_session={other}; insurelens_session={owner}'})).status_code == 404
+    assert (await client.delete(route)).status_code == 204
 
 
 async def test_ownership_origin_and_bounded_request(web):
@@ -173,7 +191,7 @@ async def test_old_file_cleanup_failure_preserves_new_document(web, monkeypatch)
     app, client = web
     case = (await client.post('/api/cases')).json()['id']
     await upload(client, case)
-    owner = client.cookies.get('insurelens_session')
+    owner = client.cookies.get('concreteinsure_session')
     old = app.state.store.get(case, owner)['document']['pdf']
     unlink = Path.unlink
     def failing_unlink(path, *args, **kwargs):

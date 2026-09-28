@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
 import {execFileSync} from 'node:child_process';import {mkdtemp,rm} from 'node:fs/promises';import path from 'node:path';import os from 'node:os';
 import {startPythonTestServer,python} from './python-test-server.mjs';
-const temp=await mkdtemp(path.join(os.tmpdir(),'insurelens-coverage-ui-'));
+const temp=await mkdtemp(path.join(os.tmpdir(),'concreteinsure-coverage-ui-'));
 const pdf=path.join(temp,'test-policy.pdf');execFileSync(python,['-c',`import pymupdf as f,sys
 d=f.open();p=d.new_page()
 lines=['6-36 독감(인플루엔자)항바이러스제치료 특별약관','제1조 (보험금의 지급사유)','보험기간 중 인플루엔자 진단을 받고 치료를 목적으로','항바이러스제를 처방받은 경우 연간 1회 보험금을 지급합니다.','  ','제2조 (독감(인플루엔자)의 정의 및 진단확정)','진단 당시 식품의약품안전처에서 허가된 치료제를 말합니다.']

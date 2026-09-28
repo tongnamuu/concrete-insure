@@ -1,6 +1,6 @@
 import pytest
-from insurelens.agents.verification import assemble_evidence
-from insurelens.core import AppError
+from concreteinsure.agents.verification import assemble_evidence
+from concreteinsure.core import AppError
 
 def hit(text='😀독감'):
     return {'id':'1:1:3','page':1,'start':1,'end':3,'sourceStart':0,'sourceEnd':3,'quote':text,'matchedText':'독감','segments':[],'offsetEncoding':'unicode-code-points','documentHash':'hash'}

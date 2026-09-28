@@ -1,6 +1,6 @@
 import re
 from urllib.parse import urlsplit
-from insurelens.core import ensure
+from concreteinsure.core import ensure
 
 
 def identify_drugs(products=None):

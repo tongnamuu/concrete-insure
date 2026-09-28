@@ -1,9 +1,9 @@
 llms:
   evidence_nim:
-    _type: insurelens_evidence_nim
+    _type: concreteinsure_evidence_nim
 function_groups:
   medicine:
-    _type: insurelens_medicine_tools
+    _type: concreteinsure_medicine_tools
     include: [lookup_products, inspect_ingredients, inspect_label, finish_evidence]
 functions:
   drug_evidence_agent:
@@ -28,6 +28,6 @@ functions:
       Never infer a disease, ingredient relationship or insurance eligibility.
       Do not write a final answer. Finish only through finish_evidence.
 workflow:
-  _type: insurelens_python
+  _type: concreteinsure_python
   drug_agent: drug_evidence_agent
   timeout_seconds: 1200

@@ -5,7 +5,7 @@ PDF operations, schema validation, and source verification are exercised.
 """
 import json
 import re
-from insurelens.core import AppError, literal_terms
+from concreteinsure.core import AppError, literal_terms
 
 
 class ScriptedNim:

@@ -6,14 +6,14 @@ import types
 import unittest
 from unittest.mock import patch
 
-from insurelens import nat as integration
+from concreteinsure import nat as integration
 
 
 class NativeNatTests(unittest.IsolatedAsyncioTestCase):
     def fake_module(self, fn):
-        module = types.ModuleType("insurelens.agent")
+        module = types.ModuleType("concreteinsure.agent")
         module.run_investigation = fn
-        return patch.dict(sys.modules, {"insurelens.agent": module})
+        return patch.dict(sys.modules, {"concreteinsure.agent": module})
 
     def arguments(self, ident="one", emit=lambda *_: None):
         return {"document": {"id": ident, "pdf": "/private/source.pdf", "index": "/private/source.index"}, "request": {"query": ident, "cloudConsent": True}, "products": [], "nim": types.SimpleNamespace(enabled=True), "emit": emit}
@@ -76,7 +76,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(integration._invocation.get())
 
     async def test_provider_error_type_survives_native_runtime(self):
-        from insurelens.core import AppError
+        from concreteinsure.core import AppError
         async def agent(**args):
             raise AppError("NIM_RATE_LIMIT", 429)
         with self.fake_module(agent), patch.dict(os.environ, {"AGENT_RUNNER": "nat"}):
@@ -97,7 +97,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
     def test_missing_nat_import_is_fatal(self):
         import builtins
         import importlib.util
-        from insurelens.core import AppError
+        from concreteinsure.core import AppError
         original = builtins.__import__
         def importing(name, *args, **kwargs):
             if name == "nat" or name.startswith("nat."):
@@ -110,7 +110,7 @@ class NativeNatTests(unittest.IsolatedAsyncioTestCase):
                 spec.loader.exec_module(module)
 
     async def test_no_key_or_consent_cannot_enter_workflow(self):
-        from insurelens.core import AppError
+        from concreteinsure.core import AppError
         for enabled, consent, code in ((False, True, "NVIDIA_KEY_REQUIRED"), (True, False, "NIM_CONSENT_REQUIRED")):
             args = self.arguments()
             args["nim"] = types.SimpleNamespace(enabled=enabled)

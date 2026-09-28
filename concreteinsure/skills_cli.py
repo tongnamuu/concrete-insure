@@ -135,7 +135,7 @@ async def _prescription(request, *, nim=None, operation=pdf_operation):
                 ensure(request.cloudConsent and getattr(nim, "ocr_enabled", False), "OCR_CONSENT_OR_CONFIG_REQUIRED", 409)
                 result = await nim.ocr(data)
                 return {**result, "candidates": await prescription_candidates(result["text"], nim=nim, consent=request.cloudConsent), "requiresConfirmation": True}
-            with TemporaryDirectory(prefix="insurelens-prescription-") as folder:
+            with TemporaryDirectory(prefix="concreteinsure-prescription-") as folder:
                 index = str(Path(folder) / "index.json.gz")
                 metadata = await operation({"op": "index", "pdf": path, "index": index})
                 ensure(metadata["pages"] <= 8, "PRESCRIPTION_PAGE_LIMIT")

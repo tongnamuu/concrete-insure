@@ -1,8 +1,8 @@
 import asyncio
 import json
 import pytest
-from insurelens.agent import run_investigation
-from insurelens.core import AppError
+from concreteinsure.agent import run_investigation
+from concreteinsure.core import AppError
 
 HIT = {'id':'1:0:2','page':1,'start':0,'end':2,'sourceStart':0,'sourceEnd':5,'quote':'독감 원문','matchedText':'독감','segments':[],'documentHash':'hash','offsetEncoding':'unicode-code-points'}
 REQUEST = {'query':'독감 관련 내용 찾아줘','description':'','confirmedTerms':[],'cloudConsent':True}
@@ -114,8 +114,8 @@ async def test_task_cancellation_propagates_without_search():
 @pytest.mark.asyncio
 async def test_accident_description_without_medical_data_uses_nat_and_real_pdf(tmp_path):
     import pymupdf
-    from insurelens.nat import configured_investigation
-    from insurelens.pdf import pdf_operation
+    from concreteinsure.nat import configured_investigation
+    from concreteinsure.pdf import pdf_operation
     from tests.nim_fixture import ScriptedNim
     description='가상 사례: 횡단보도를 걷던 보행자에게 오토바이가 부딪혔습니다.'
     class AccidentNim(ScriptedNim):

@@ -7,7 +7,7 @@ The Python executable is allowed to reach configured NIM chat/OCR and MFDS desti
 Official application pattern:
 
 ```sh
-openshell sandbox create --from YOUR_PREBUILT_INSURELENS_IMAGE --policy integrations/openshell/policy.yaml -- /app/.venv/bin/python -m insurelens.server
+openshell sandbox create --from YOUR_PREBUILT_CONCRETEINSURE_IMAGE --policy integrations/openshell/policy.yaml -- /app/.venv/bin/python -m concreteinsure.server
 ```
 
 The image is intentionally not built/published in this task. Configure gateway/provider credentials and web port forwarding using your installed OpenShell documentation; do not embed keys in images or policy. The current app binds localhost and validates Host/Origin; production reverse proxy/account support is outside this local demo. A self-hosted GPU OCR endpoint requires a separately reviewed destination rule. This template has not been executed in an OpenShell sandbox on this Mac and is not represented as a verified deployment.

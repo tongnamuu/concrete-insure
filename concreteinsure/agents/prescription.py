@@ -1,5 +1,5 @@
 import re
-from insurelens.core import grounded_terms
+from concreteinsure.core import grounded_terms
 
 
 async def prescription_candidates(text, *, nim=None, consent=False):
