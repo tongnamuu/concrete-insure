@@ -31,13 +31,9 @@ async def medicine_tools(config: MedicineToolsConfig, builder: Builder):
         record('agent.tool', agent='drug_evidence', tool='lookup_products')
         return json.dumps(await current_state().lookup(value.name_id), ensure_ascii=False)
 
-    async def inspect_ingredients(value: ProductArgs) -> str:
-        record('agent.tool', agent='drug_evidence', tool='inspect_ingredients')
-        return json.dumps(await current_state().ingredients(value.product_id), ensure_ascii=False)
-
-    async def inspect_label(value: ProductArgs) -> str:
-        record('agent.tool', agent='drug_evidence', tool='inspect_label')
-        return json.dumps(await current_state().label(value.product_id), ensure_ascii=False)
+    async def inspect_product(value: ProductArgs) -> str:
+        record('agent.tool', agent='drug_evidence', tool='inspect_product')
+        return json.dumps(await current_state().inspect_product(value.product_id), ensure_ascii=False)
 
     async def finish_evidence(value: EmptyArgs) -> str:
         record('agent.tool', agent='drug_evidence', tool='finish_evidence')
@@ -45,10 +41,8 @@ async def medicine_tools(config: MedicineToolsConfig, builder: Builder):
 
     group.add_function('lookup_products', lookup_products, input_schema=NameArgs,
                        description='Find MFDS candidates for one provided name_id. Never select a candidate for the user.')
-    group.add_function('inspect_ingredients', inspect_ingredients, input_schema=ProductArgs,
-                       description='Fetch fresh official ingredients for a user-selected product_id. Returns label availability.')
-    group.add_function('inspect_label', inspect_label, input_schema=ProductArgs,
-                       description='Inspect original label evidence after ingredients. Required when labelAvailable is true.')
+    group.add_function('inspect_product', inspect_product, input_schema=ProductArgs,
+                       description='Fetch fresh official detail and inspect ingredients plus all available label evidence for one user-selected product_id. Returns validated original source facts in one observation.')
     group.add_function('finish_evidence', finish_evidence, input_schema=EmptyArgs,
                        description='Application-only completion control. Revalidates all required observations and source integrity before returning server evidence.')
     yield group

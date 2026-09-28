@@ -32,8 +32,7 @@ class ProductArgs(EmptyArgs):
 
 SCHEMAS = {
     'medicine__lookup_products': NameArgs,
-    'medicine__inspect_ingredients': ProductArgs,
-    'medicine__inspect_label': ProductArgs,
+    'medicine__inspect_product': ProductArgs,
 }
 
 
@@ -110,21 +109,16 @@ class DrugState:
         return {'name_id': name_id, 'products': result['products'], 'truncated': result.get('truncated', False),
                 'requiresSelection': True}
 
-    async def ingredients(self, product_id):
+    async def inspect_product(self, product_id):
+        """Fetch and validate a product's ingredients and label as one observation."""
         ensure(not self.missing and 0 <= product_id < len(self.products), 'UNVERIFIED_PRODUCT', 502)
         ensure(product_id not in self.details, 'REPEATED_TOOL_CALL', 502)
         detail = await self.drugs.detail(self.products[product_id]['id'])
         ensure(detail['product']['id'] == self.products[product_id]['id'], 'MFDS_PRODUCT_MISMATCH', 502)
+        ref = reference_from_detail(detail)
+        verify_drug_references([ref])
+        # Publish no partial state if a required document or source fails validation.
         self.details[product_id] = detail
-        ref = reference_from_detail(detail, include_label=False)
-        self.references[product_id] = ref
-        return {'product_id': product_id, 'facts': ref['facts'], 'source': ref['source'],
-                'labelAvailable': any(detail['documents'].get(k) for k in LABEL_FIELDS)}
-
-    async def label(self, product_id):
-        ensure(product_id in self.details, 'DRUG_DETAIL_REQUIRED', 502)
-        ensure(product_id not in self.inspected_labels, 'REPEATED_TOOL_CALL', 502)
-        ref = reference_from_detail(self.details[product_id])
         self.references[product_id] = ref
         self.inspected_labels.add(product_id)
         return {'product_id': product_id, 'facts': ref['facts'], 'source': ref['source']}

@@ -40,7 +40,7 @@ async def test_native_agent_inspects_sources_and_terminates_via_tool_without_gen
         product=(await drugs.lookup('조플루자'))['products'][0];calls.clear()
         result=await specialty(nim,drugs,products=[product])
         assert result['status']=='ready' and len(calls)==1
-        assert nim.calls==['drug_complete']*2  # ingredient -> label; code decides completion
+        assert nim.calls==['drug_complete']  # one combined inspection; code decides completion
         assert result['specificTerms']==['발록사비르 마르복실','발록사비르']
         assert result['references'][0]['facts'][-1]['quote'].endswith('예방')
         assert _state.get() is None and _runner.get() is None
@@ -57,7 +57,9 @@ def tool(name, args=None, identifier='test-call'):
     (tool('lookup_products',{'name_id':4}),'UNGROUNDED_DRUG_NAME'),
     (tool('lookup_products',{'name_id':True}),'INVALID_TOOL_ARGUMENTS'),
     (tool('lookup_products',{'name_id':0,'secret':'must-not-appear'}),'INVALID_TOOL_ARGUMENTS'),
-    (tool('inspect_ingredients',{'product_id':0}),'UNVERIFIED_PRODUCT'),
+    (tool('inspect_product',{'product_id':0}),'UNVERIFIED_PRODUCT'),
+    (tool('inspect_ingredients',{'product_id':0}),'UNSUPPORTED_TOOL'),
+    (tool('inspect_label',{'product_id':0}),'UNSUPPORTED_TOOL'),
     (tool('finish_evidence'),'UNSUPPORTED_TOOL'),
     (tool('shell'),'UNSUPPORTED_TOOL'),
     ({'finish_reason':'stop','message':{'role':'assistant','content':'invented ingredient and payout'}},'DRUG_AGENT_UNFINISHED'),
@@ -90,17 +92,23 @@ async def test_model_observes_tool_result_then_cannot_repeat_lookup():
 
 
 @pytest.mark.asyncio
-async def test_required_label_cannot_be_skipped():
-    class Nim:
-        enabled=True
-        async def complete(self,messages,tools):
-            if any(m['role']=='tool' for m in messages):return tool('finish_evidence',identifier='finish')
-            return tool('inspect_ingredients',{'product_id':0})
-    drugs=provider()
+@pytest.mark.parametrize('field', ['UD_DOC_DATA', 'PN_DOC_DATA', 'NB_DOC_DATA', 'EE_DOC_DATA'])
+async def test_invalid_label_does_not_publish_partial_product_state(field):
+    from concreteinsure.agents.drug_agent import DrugState
+    drugs = provider()
     try:
-        product=(await drugs.lookup('조플루자'))['products'][0]
-        with pytest.raises(AppError,match='UNSUPPORTED_TOOL'):await specialty(Nim(),drugs,products=[product])
-    finally:await drugs.close()
+        product = (await drugs.lookup('조플루자'))['products'][0]
+        detail = await drugs.detail(product['id'])
+        detail['documents'][field] = '<DOC>'
+        class Invalid:
+            async def detail(self, _): return detail
+        state = DrugState(names=[], products=[product], nim=DrugNim(), drugs=Invalid(), emit=lambda *_: None)
+        with pytest.raises(AppError, match='MFDS_INVALID_DOCUMENT'):
+            await state.inspect_product(0)
+        assert state.details == state.references == {} and not state.inspected_labels
+        assert not state.completion_ready and state.result is None
+        with pytest.raises(AppError, match='DRUG_EVIDENCE_INCOMPLETE'): state.finish()
+    finally: await drugs.close()
 
 
 @pytest.mark.asyncio
@@ -191,12 +199,79 @@ async def test_multiple_products_require_all_ingredients_and_available_labels():
     try:
         products = (await drugs.lookup('조플루자'))['products']
         result = await specialty(nim, drugs, products=products)
-        assert nim.calls == ['drug_complete'] * 4
+        assert nim.calls == ['drug_complete'] * 2
         assert result['status'] == 'ready'
         assert [ref['id'] for ref in result['references']] == ['mfds-' + p['id'] for p in products]
         assert all(any(fact['field'] == 'EE_DOC_DATA' for fact in ref['facts']) for ref in result['references'])
     finally:
         await drugs.close()
+
+
+@pytest.mark.asyncio
+async def test_combined_observation_preserves_all_source_facts_and_safe_logs():
+    from concreteinsure.agents.drug_references import reference_from_detail
+    drugs = provider()
+    original = drugs.detail
+    details = []
+    async def detail(identifier):
+        value = await original(identifier)
+        details.append(value)
+        return value
+    drugs.detail = detail
+    stream = io.StringIO(); logger = RuntimeLog(stream=stream); nim = DrugNim()
+    try:
+        product = (await drugs.lookup('조플루자'))['products'][0]
+        with log_context(logger): result = await specialty(nim, drugs, products=[product])
+        assert len(details) == 1 and nim.calls == ['drug_complete']
+        assert result['references'] == [reference_from_detail(details[0])]
+        rows = [json.loads(line) for line in stream.getvalue().splitlines()]
+        assert [r['tool'] for r in rows if r['event'] == 'agent.tool'] == ['inspect_product', 'finish_evidence']
+        assert next(r for r in rows if r['event'] == 'agent.completed')['steps'] == 1
+        assert all(f['quote'] not in stream.getvalue() for f in result['references'][0]['facts'])
+        assert product['name'] not in stream.getvalue() and 'test-only' not in stream.getvalue()
+    finally:
+        await drugs.close(); logger.close()
+
+
+@pytest.mark.asyncio
+async def test_combined_inspection_cannot_repeat_a_product_while_another_is_pending():
+    class RepeatNim:
+        enabled = True
+        calls = 0
+        async def complete(self, messages, tools):
+            self.calls += 1
+            if self.calls == 2:
+                observation = json.loads(next(m['content'] for m in messages if m['role'] == 'tool'))
+                assert any(f['field'] == 'EE_DOC_DATA' for f in observation['facts'])
+            return tool('inspect_product', {'product_id': 0}, identifier=str(self.calls))
+    calls = []; drugs = provider(calls)
+    try:
+        products = (await drugs.lookup('조플루자'))['products']; calls.clear()
+        with pytest.raises(AppError, match='REPEATED_TOOL_CALL'):
+            await specialty(RepeatNim(), drugs, products=products)
+        assert len(calls) == 1 and _state.get() is None
+    finally: await drugs.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_combined_inspection_during_detail_publishes_no_evidence():
+    from concreteinsure.agents.drug_agent import current_state
+    drugs = provider(); entered = asyncio.Event(); cancelled = asyncio.Event(); states = []
+    async def waiting_detail(_):
+        states.append(current_state()); entered.set()
+        try: await asyncio.Event().wait()
+        finally: cancelled.set()
+    try:
+        product = (await drugs.lookup('조플루자'))['products'][0]
+        drugs.detail = waiting_detail
+        task = asyncio.create_task(specialty(DrugNim(), drugs, products=[product]))
+        await asyncio.wait_for(entered.wait(), 15)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError): await task
+        assert cancelled.is_set() and _state.get() is None
+        assert states[0].details == states[0].references == {} and states[0].result is None
+        assert not states[0].completion_ready
+    finally: await drugs.close()
 
 
 @pytest.mark.asyncio
@@ -208,7 +283,7 @@ async def test_no_label_completes_after_detail_without_extra_inference(with_ingr
     async def detail(identifier):
         value = await original(identifier)
         if with_ingredients:
-            for key in ('EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA'):
+            for key in ('EE_DOC_DATA', 'UD_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA'):
                 value['documents'][key] = ''
         else:
             value['documents'] = {}
@@ -239,7 +314,7 @@ async def test_auto_completion_revalidates_reference_integrity(monkeypatch):
         product = (await drugs.lookup('조플루자'))['products'][0]
         with pytest.raises(AppError, match='UNVERIFIED_DRUG_REFERENCE'):
             await specialty(nim, drugs, products=[product])
-        assert nim.calls == ['drug_complete'] * 2
+        assert nim.calls == ['drug_complete']
         assert _state.get() is None
     finally:
         await drugs.close()
@@ -262,7 +337,7 @@ async def test_last_required_tool_failure_never_auto_completes(monkeypatch):
         product = (await drugs.lookup('조플루자'))['products'][0]
         with log_context(logger), pytest.raises(AppError, match='MFDS_INVALID_DOCUMENT'):
             await specialty(nim, drugs, products=[product])
-        assert nim.calls == ['drug_complete'] * 2
+        assert nim.calls == ['drug_complete']
         assert 'agent.finalizing' not in stream.getvalue() and 'agent.completed' not in stream.getvalue()
         assert _state.get() is None
     finally:
@@ -280,5 +355,5 @@ async def test_dosage_only_label_must_be_inspected_before_code_completion():
         async def detail(self, _): return detail
     nim = DrugNim()
     result = await specialty(nim, Drugs(), products=[product])
-    assert nim.calls == ['drug_complete', 'drug_complete']
+    assert nim.calls == ['drug_complete']
     assert result['specificTerms'] == ['인산 오셀타미비르', '오셀타미비르']

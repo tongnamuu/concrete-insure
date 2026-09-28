@@ -100,9 +100,10 @@ Every web message has a fresh consent checkbox mentioning NVIDIA and current/pre
 | NAT tool | Input | Observation / enforcement |
 |---|---|---|
 | `medicine__lookup_products` | `{name_id: int}` | Only names grounded by input extraction; official candidates; never automatic selection |
-| `medicine__inspect_ingredients` | `{product_id: int}` | Only user-selected, case-owned products; fresh detail; structured source facts and `labelAvailable` |
-| `medicine__inspect_label` | `{product_id: int}` | Requires detail observation; original source facts with field/paragraph/hash/URL |
+| `medicine__inspect_product` | `{product_id: int}` | Only user-selected, case-owned products; fresh detail; ingredients and all available label evidence validated together; original facts with field/paragraph/hash/URL |
 | `medicine__finish_evidence` (application only) | `{}` | All missing names looked up OR every selected product and available label inspected; revalidate and assemble source-bound result without a NIM call |
+
+The combined inspection commits detail, reference and label-completion state only after all source parsing and integrity checks succeed. The former separate ingredient/label tools are no longer registered or model-selectable. One selected product requires one model-selected inspection, followed by application completion; multiple products still require individual observations.
 
 Each tool accepts exactly its schema (strict integer indexes, no extra fields). One evidence tool per model turn, no repeated tool/ID calls, maximum 12 model turns. Completion is an internal control step and does not increase the model-call count. Empty candidates remain a needs-selection result, missing ingredient evidence remains unresolved, and failed lookups/required label parsing/source validation never become success. The native graph handles tool-result observations; parsing and ingredient relation validation remain code. SDK inference retains 300 seconds per attempt and one retry for transient failures, with NAT's 1200-second overall deadline and cancellable SSE progress. Provider and validation failures never create local substitute evidence. Runtime does not import test fixtures.
 

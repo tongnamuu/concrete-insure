@@ -117,5 +117,5 @@ async def test_salt_ingredient_connects_via_dose_source_to_verbatim_policy(tmp_p
         source = w.extract(pdf.read_bytes())
         for hit in result['quotes']: w.verify(source, hit)
         assert any(f['kind'] == 'dose_basis' for f in result['references'][0]['facts'])
-        assert nim.calls.count('drug_complete') == 2
+        assert nim.calls.count('drug_complete') == 1
     finally: await drugs.close()
