@@ -1,11 +1,8 @@
 import asyncio
-import base64
-import io
 import json
 
 import httpx
 import pytest
-from PIL import Image
 from nemo_microservices import AsyncNeMoMicroservices
 from concreteinsure.providers import Nvidia, Drugs
 from concreteinsure.core import AppError
@@ -108,43 +105,6 @@ async def test_cancel_propagates_and_missing_key_makes_no_request():
         await provider.chat([])
     assert provider._sdk is None
     await provider.close()
-
-
-@pytest.mark.asyncio
-async def test_translation_original_immutable_and_invalid_ids_rejected():
-    response = {'glosses': [{'id': 0, 'english': 'influenza'}]}
-    provider = Nvidia(env={**ENV, 'TRANSLATION_MODEL': 'translation-model'}, transport=httpx.MockTransport(lambda r: httpx.Response(200, json=completion(json.dumps(response)))))
-    terms = ['독감']
-    try:
-        assert await provider.gloss(terms) == [{'id': 0, 'original': '독감', 'english': 'influenza'}]
-        assert terms == ['독감']
-        response['glosses'][0]['id'] = 1
-        with pytest.raises(AppError, match='TRANSLATION_BOUNDARY'):
-            await provider.gloss(terms)
-    finally:
-        await provider.close()
-
-
-@pytest.mark.asyncio
-async def test_ocr_reencodes_strips_metadata_and_marks_unconfirmed():
-    source = Image.new('RGB', (20, 10), 'white')
-    exif = Image.Exif(); exif[270] = 'private metadata'
-    data = io.BytesIO(); source.save(data, 'JPEG', exif=exif)
-    def handler(request):
-        assert str(request.url) == 'https://ocr.example/infer'
-        body = json.loads(request.content)
-        image = Image.open(io.BytesIO(base64.b64decode(body['input'][0]['url'].split(',')[1])))
-        assert image.format == 'PNG' and not image.getexif()
-        assert 'exif' not in image.info and 'icc_profile' not in image.info
-        return httpx.Response(200, json={'data': [{'text_detections': [{'text_prediction': {'text': '조플루자'}}]}]})
-    provider = Nvidia(env={**ENV, 'NIM_OCR_URL': 'https://ocr.example/infer'}, transport=httpx.MockTransport(handler))
-    try:
-        result = await provider.ocr(data.getvalue(), 'image/jpeg')
-        assert result['text'] == '조플루자' and result['requiresConfirmation'] is True
-        with pytest.raises(AppError, match='INVALID_IMAGE'):
-            await provider.ocr(b'not an image', 'image/png')
-    finally:
-        await provider.close()
 
 
 @pytest.mark.asyncio

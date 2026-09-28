@@ -4,12 +4,10 @@ One JSON object on stdin; one JSON result or {"error":"CODE"} on stdout.
 File paths are trusted CLI inputs, never accepted as web API file selectors.
 """
 import asyncio
-import base64
 import json
 import re
 import sys
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
@@ -20,18 +18,6 @@ from .pdf import pdf_operation
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
-
-
-class TextPrescription(Strict):
-    op: Literal["text"]
-    text: str = Field(min_length=1, max_length=50000)
-    cloudConsent: bool = False
-
-
-class FilePrescription(Strict):
-    op: Literal["file"]
-    path: str = Field(min_length=1, max_length=4096)
-    cloudConsent: bool = False
 
 
 class DetailRequest(Strict):
@@ -107,7 +93,6 @@ class PdfAnnotate(PdfIndex):
 
 
 SCHEMAS = {
-    "ocr-prescription": TypeAdapter(Annotated[TextPrescription | FilePrescription, Field(discriminator="op")]),
     "drug-ingredient-resolver": TypeAdapter(Annotated[DetailRequest | LookupRequest, Field(discriminator="op")]),
     "pdf-iso32000-annotator": TypeAdapter(Annotated[PdfIndex | PdfSearch | PdfContext | PdfAnnotate, Field(discriminator="op")]),
 }
@@ -118,46 +103,9 @@ def absolute_path(value):
     return str(Path(value).resolve())
 
 
-async def _prescription(request, *, nim=None, operation=pdf_operation):
-    from .agents.prescription import prescription_candidates
-    owns_provider = nim is None
-    if nim is None:
-        from .providers import Nvidia
-        nim = Nvidia()
-    try:
-        if request.op == "text":
-            text, method = request.text, "provided-text"
-        else:
-            path = absolute_path(request.path)
-            ensure(Path(path).stat().st_size <= 8 * 1024 * 1024, "PRESCRIPTION_SIZE_LIMIT", 413)
-            data = Path(path).read_bytes()
-            if not data.startswith(b"%PDF-"):
-                ensure(request.cloudConsent and getattr(nim, "ocr_enabled", False), "OCR_CONSENT_OR_CONFIG_REQUIRED", 409)
-                result = await nim.ocr(data)
-                return {**result, "candidates": await prescription_candidates(result["text"], nim=nim, consent=request.cloudConsent), "requiresConfirmation": True}
-            with TemporaryDirectory(prefix="concreteinsure-prescription-") as folder:
-                index = str(Path(folder) / "index.json.gz")
-                metadata = await operation({"op": "index", "pdf": path, "index": index})
-                ensure(metadata["pages"] <= 8, "PRESCRIPTION_PAGE_LIMIT")
-                if metadata["textPages"] == metadata["pages"]:
-                    result = await operation({"op": "text", "pdf": path, "index": index})
-                    text, method = result["text"], "pdf-text-layer"
-                else:
-                    ensure(request.cloudConsent and getattr(nim, "ocr_enabled", False), "OCR_CONSENT_OR_CONFIG_REQUIRED", 409)
-                    result = await operation({"op": "render", "pdf": path})
-                    parts = [await nim.ocr(base64.b64decode(image), "image/png") for image in result["images"]]
-                    text, method = "\n".join(part["text"] for part in parts), "ocr"
-        return {"text": text, "candidates": await prescription_candidates(text, nim=nim, consent=request.cloudConsent), "requiresConfirmation": True, "method": method}
-    finally:
-        if owns_provider:
-            await nim.close()
-
-
-async def execute(skill, value, *, nim=None, drugs=None, operation=pdf_operation):
+async def execute(skill, value, *, drugs=None, operation=pdf_operation):
     ensure(skill in SCHEMAS, "UNKNOWN_SKILL")
     request = SCHEMAS[skill].validate_python(value)
-    if skill == "ocr-prescription":
-        return await _prescription(request, nim=nim, operation=operation)
     if skill == "drug-ingredient-resolver":
         owns_provider = drugs is None
         if drugs is None:

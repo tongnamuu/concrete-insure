@@ -83,16 +83,11 @@ async def test_full_api_and_persisted_events(web):
     assert not (app.state.store.root / case).exists()
 
 
-async def test_upload_drafts_and_source_guards(web):
+async def test_upload_and_source_guards(web):
     app, client = web
     case = (await client.post("/api/cases")).json()["id"]
     bad = await client.post(f"/api/cases/{case}/documents", files={"file": ("bad.pdf", b"not pdf")})
     assert bad.json()["error"] == "INVALID_PDF"
-    result = await client.post(f"/api/cases/{case}/ocr", files={"file": ("rx.pdf", fixture_pdf("약품명: 조플루자\n질병코드: J10.1"))})
-    draft = (await wait(client, result.json()["jobId"]))["result"]
-    assert draft["requiresConfirmation"] is True
-    assert "조플루자" in draft["candidates"] and "J10.1" in draft["candidates"]
-    assert (await client.post(f"/api/cases/{case}/ocr", files={"file": ("rx.png", b"image")})).status_code == 409
     await upload(client, case)
     for payload in ({"query": "   "}, {"query": "독감", "cloudConsent": "true"}, {"query": "독감", "injected": 1}, {"query": "독감", "drugIds": ["200001234"], "cloudConsent":True}):
         assert (await client.post(f"/api/cases/{case}/investigations", json=payload)).status_code == 400
@@ -168,8 +163,7 @@ async def test_running_pdf_cancel_and_delete(tmp_path):
         assert cancelled.is_set()
         assert not (tmp_path / case).exists()
 
-@pytest.mark.parametrize('route', ['documents', 'ocr'])
-async def test_delete_during_streaming_upload_leaves_no_orphan(web, route):
+async def test_delete_during_streaming_upload_leaves_no_orphan(web):
     app, client = web
     case = (await client.post('/api/cases')).json()['id']
     waiting, release = asyncio.Event(), asyncio.Event()
@@ -178,7 +172,7 @@ async def test_delete_during_streaming_upload_leaves_no_orphan(web, route):
         waiting.set()
         await release.wait()
         yield fixture_pdf() + b'\r\n--boundary--\r\n'
-    task = asyncio.create_task(client.post(f'/api/cases/{case}/{route}', content=body(), headers={'Content-Type': 'multipart/form-data; boundary=boundary'}))
+    task = asyncio.create_task(client.post(f'/api/cases/{case}/documents', content=body(), headers={'Content-Type': 'multipart/form-data; boundary=boundary'}))
     await waiting.wait()
     assert (await client.delete(f'/api/cases/{case}')).status_code == 204
     release.set()
@@ -251,3 +245,37 @@ async def test_failed_case_file_deletion_keeps_records_for_retry(web, monkeypatc
     assert (await client.delete(f'/api/cases/{case}')).status_code == 204
     assert (await client.get(f'/api/cases/{case}')).status_code == 404
     assert not (app.state.store.root / case).exists()
+
+
+async def test_removed_processing_routes_and_flags_cannot_create_jobs(web):
+    app, client = web
+    config = (await client.get('/api/config')).json()
+    assert 'ocrEnabled' not in config and 'translationEnabled' not in config
+    assert '/api/cases/{identifier}/ocr' not in app.openapi()['paths']
+    case = (await client.post('/api/cases')).json()['id']
+    for filename, data in [('image.png', b'not a policy'), ('scan.pdf', fixture_pdf())]:
+        response = await client.post(f'/api/cases/{case}/ocr',
+            files={'file': (filename, data)}, headers={'X-Cloud-Consent': 'yes'})
+        # Unmatched POSTs reach the static-file mount and are rejected with 405.
+        assert response.status_code == 405
+    assert app.state.store.jobs(case) == []
+    await upload(client, case)
+    before = [j['id'] for j in app.state.store.jobs(case)]
+    for translation in (True, False):
+        response = await client.post(f'/api/cases/{case}/investigations',
+            json={'query': '독감', 'cloudConsent': True, 'translation': translation})
+        assert response.status_code == 400
+    assert [j['id'] for j in app.state.store.jobs(case)] == before
+
+
+async def test_policy_without_text_layer_is_rejected(web):
+    _, client = web
+    case = (await client.post('/api/cases')).json()['id']
+    with pymupdf.open() as doc:
+        doc.new_page()
+        data = doc.tobytes()
+    response = await client.post(f'/api/cases/{case}/documents',
+        files={'file': ('scan.pdf', data, 'application/pdf')})
+    assert response.status_code == 202
+    job = await wait(client, response.json()['jobId'])
+    assert job['state'] == 'failed' and job['error'] == 'TEXT_LAYER_REQUIRED'

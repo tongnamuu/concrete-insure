@@ -10,8 +10,6 @@ from concreteinsure.core import AppError, literal_terms
 
 class ScriptedNim:
     enabled = True
-    ocr_enabled = False
-    translation_model = ""
 
     def __init__(self, fail_code=None):
         self.fail_code = fail_code

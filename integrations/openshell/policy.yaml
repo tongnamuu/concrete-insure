@@ -23,18 +23,6 @@ network_policies:
               path: /v1/chat/completions
     binaries:
       - path: /app/.venv/bin/python
-  nvidia_ocr:
-    endpoints:
-      - host: ai.api.nvidia.com
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        rules:
-          - allow:
-              method: POST
-              path: /v1/cv/nvidia/nemotron-ocr-v2
-    binaries:
-      - path: /app/.venv/bin/python
   mfds:
     endpoints:
       - host: apis.data.go.kr

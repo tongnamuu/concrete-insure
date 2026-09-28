@@ -1,4 +1,4 @@
-import {ready,emptySession} from './browser-session-helper.mjs';
+import {ready,emptySession,restoredSession} from './browser-session-helper.mjs';
 import assert from 'node:assert/strict';
 import {chromium,expect} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
@@ -52,6 +52,6 @@ try{
  assert.notEqual(requests.at(-1).conversationId,previousConversation);
  await send('독감',1);
  await page.locator('#policyFile').setInputFiles(pdf);await expect(page.locator('.user-message,.investigation-result,.assistant-message')).toHaveCount(0,{timeout:30000});
- await page.reload();await emptySession(page);
- assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,singleInput:true,followUpWithSource:true,reloadClearsConversation:true,newConversationClearsContext:true,clearCancellationKeepsSession:true,dataClearStartsFreshConversation:true,clearedContextNotInherited:true,consentEachTurn:true,failureCanBeReentered:true,documentReplacementClearsContext:true,browserErrors:errors}));
+ await page.reload();await restoredSession(page);
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,singleInput:true,followUpWithSource:true,reloadPreservesDocument:true,newConversationClearsContext:true,clearCancellationKeepsSession:true,dataClearStartsFreshConversation:true,clearedContextNotInherited:true,consentEachTurn:true,failureCanBeReentered:true,documentReplacementClearsContext:true,browserErrors:errors}));
 }finally{await browser.close();await server.close();await rm(temp,{recursive:true,force:true});}
