@@ -11,7 +11,7 @@ from concreteinsure.core import AppError, ensure
 from concreteinsure.diagnostics import record
 from concreteinsure.progress import model_progress
 from .drug import identify_drugs
-from .drug_references import reference_from_detail, verify_drug_references
+from .drug_references import LABEL_FIELDS, reference_from_detail, verify_drug_references
 
 SKILL = (Path(__file__).resolve().parents[2] / 'skills/drug-ingredient-resolver/SKILL.md').read_text()
 _runner: ContextVar[Any] = ContextVar('concreteinsure_drug_runner', default=None)
@@ -71,7 +71,7 @@ class DrugState:
         if not expected or set(self.details) != expected or set(self.references) != expected:
             return False
         return all(i in self.inspected_labels or not any(
-            detail['documents'].get(key) for key in ('EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA'))
+            detail['documents'].get(key) for key in LABEL_FIELDS)
             for i, detail in self.details.items())
 
     def plan(self, response):
@@ -119,7 +119,7 @@ class DrugState:
         ref = reference_from_detail(detail, include_label=False)
         self.references[product_id] = ref
         return {'product_id': product_id, 'facts': ref['facts'], 'source': ref['source'],
-                'labelAvailable': any(detail['documents'].get(k) for k in ('EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA'))}
+                'labelAvailable': any(detail['documents'].get(k) for k in LABEL_FIELDS)}
 
     async def label(self, product_id):
         ensure(product_id in self.details, 'DRUG_DETAIL_REQUIRED', 502)
@@ -140,7 +140,7 @@ class DrugState:
         else:
             ensure(set(self.details) == set(range(len(self.products))), 'DRUG_EVIDENCE_INCOMPLETE', 502)
             for i, detail in self.details.items():
-                if any(detail['documents'].get(k) for k in ('EE_DOC_DATA', 'NB_DOC_DATA', 'PN_DOC_DATA')):
+                if any(detail['documents'].get(k) for k in LABEL_FIELDS):
                     ensure(i in self.inspected_labels, 'DRUG_LABEL_REQUIRED', 502)
             refs = [self.references[i] for i in range(len(self.products))]
             verify_drug_references(refs)

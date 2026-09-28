@@ -268,3 +268,17 @@ async def test_last_required_tool_failure_never_auto_completes(monkeypatch):
     finally:
         await drugs.close()
         logger.close()
+
+
+@pytest.mark.asyncio
+async def test_dosage_only_label_must_be_inspected_before_code_completion():
+    from tests.test_drug_references import dose_detail
+    detail = dose_detail()
+    product = {**detail['product'], 'ingredients': '인산 오셀타미비르'}
+    class Drugs:
+        enabled = True
+        async def detail(self, _): return detail
+    nim = DrugNim()
+    result = await specialty(nim, Drugs(), products=[product])
+    assert nim.calls == ['drug_complete', 'drug_complete']
+    assert result['specificTerms'] == ['인산 오셀타미비르', '오셀타미비르']
